@@ -1,0 +1,12 @@
+[package]
+name = "vote-backend-2"
+version = "0.1.0"
+authors = ["Stephen <stephenmerc@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tokio-postgres = "0.6.0"
+tokio = { version = "0.2", features = ["full"] }
+warp = "0.2"
