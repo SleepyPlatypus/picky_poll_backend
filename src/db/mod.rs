@@ -7,9 +7,11 @@ use sqlx::{
     Executor,
     postgres::PgPool,
 };
+use std::marker::PhantomData;
 
-pub struct VoteDbClient {
+pub struct VoteDbClient<'d, D> where D: Executor<'d> {
     db: PgPool,
+    _p: PhantomData<&'d D>,
 }
 
 type Timestamp = DateTime<Utc>;
@@ -48,37 +50,37 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-pub async fn put_poll(voteDb: &VoteDbClient, poll: &Poll) -> Result<(), PutPollErr> {
+// pub async fn put_poll(voteDb: &VoteDbClient, poll: &Poll) -> Result<(), PutPollErr> {
 
-    let mut query = sqlx::query("
-insert
-into poll(id, name, description, ownerId, expires, close)
-values ($1, $2, $3, $4, $5, $6)")
-        .bind(&poll.id)
+//     let mut query = sqlx::query("
+// insert
+// into poll(id, name, description, ownerId, expires, close)
+// values ($1, $2, $3, $4, $5, $6)")
+//         .bind(&poll.id)
+//         .bind(&poll.name)
+//         .bind(&poll.description)
+//         .bind(&poll.owner_id)
+//         .bind(&poll.expires)
+//         .bind(&poll.close);
+    
+//     voteDb.db.execute(query).await?;
+//     Ok(())
+// }
+
+impl<'d, D> VoteDbClient<'d, D> where D: Executor<'d>
+{
+    pub async fn put_poll(self: &VoteDbClient<'d, D>, poll: &Poll) -> Result<(), PutPollErr> {
+        let query = sqlx::query("insert into poll(id, name, description, ownerId, expires, close) values ($1, $2, $3, $4, $5, $6)").bind(&poll.id)
         .bind(&poll.name)
         .bind(&poll.description)
         .bind(&poll.owner_id)
-        .bind(&poll.expires)
-        .bind(&poll.close);
-    
-    voteDb.db.execute(query).await?;
-    Ok(())
-}
+        .bind(poll.expires)
+        .bind(poll.close);
 
-// impl<'e, E> VoteDbClient<'e, E>
-// where E: Executor<'e> {
-//     pub async fn put_poll(self: &VoteDbClient<'e, E>, poll: &Poll) -> Result<(), PutPollErr> {
-//         let query = sqlx::query("
-//             INSERT into poll(id, name, description, ownerId, expires, close)
-//             values (?, ?, ?, ?, ?, ?)
-//         ").bind(poll.id)
-//         .bind(poll.name)
-//         .bind(poll.description)
-//         .bind(poll.owner_id)
-//         .bind(poll.expires)
-//         .bind(poll.close).execute(self.db).await?;
-//         Ok(())
-//     }
+        self.db.execute(query).await?;
+        Ok(())
+    }
+}
     // pub async fn get_poll(self: &VoteDbClient<'c, E>, id: &str) -> Result<Poll, GetPollErr> {
     //     let rows = sqlx::query(
     //         "select id, name, description, ownerId, expires, close from poll where id=?",
@@ -106,12 +108,15 @@ mod tests {
         any::Any,
         env,
     };
-    use sqlx::postgres::PgPoolOptions;
+    use sqlx::postgres::{
+        PgPool,
+        PgPoolOptions,
+    };
 
     const DATABASE_URL: &str = "DATABASE_URL";
 
     #[tokio::test]
-    async fn test_put_poll() -> Result<(), PutPollErr> {
+    async fn test_put_poll<'a>() {
         let db_url = &env::var(&DATABASE_URL).unwrap();
         let pool = PgPoolOptions::new()
             .max_connections(1)
@@ -119,8 +124,8 @@ mod tests {
             .await
             .unwrap();
 
-        let client = VoteDbClient{db: pool};
-        let mockPollRow = Poll {
+        let client: VoteDbClient<'a, &PgPool> = VoteDbClient{db: pool, _p: PhantomData};
+        let mock_poll_row = Poll {
             id: String::from(""),
             name: String::from("My poll"),
             description: String::from("what a great poll"),
@@ -128,7 +133,7 @@ mod tests {
             close: None,
             expires: Utc::now(),
         };
-        put_poll(&client, &mockPollRow).await?;
-        Ok(())
+
+        client.put_poll(&mock_poll_row).await.unwrap();
     }
 }
