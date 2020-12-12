@@ -14,6 +14,9 @@ rand = "0.7"
 
 tokio = { version = "0.2", features = ["full"] }
 
-tokio-postgres = { version = "0.6.0", features = ["with-chrono-0_4"] }
+sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls", "postgres", "chrono" ] }
 
 warp = "0.2"
+
+[dev-dependencies]
+sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls", "sqlite" ] }
