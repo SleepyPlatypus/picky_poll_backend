@@ -17,6 +17,3 @@ tokio = { version = "0.2", features = ["full"] }
 sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls", "postgres", "chrono" ] }
 
 warp = "0.2"
-
-[dev-dependencies]
-sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls", "sqlite" ] }
