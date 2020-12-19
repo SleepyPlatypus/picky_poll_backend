@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use chrono::{
     DateTime,
     offset::Utc,
@@ -9,7 +10,7 @@ use sqlx::{
 };
 use std::marker::PhantomData;
 
-pub struct VoteDbClient<'e, E>
+pub struct VoteDb<'e, E>
 where E: Executor<'e> {
     db: E,
     _p: PhantomData<&'e E>
@@ -51,7 +52,8 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-impl<'e, E> VoteDbClient<'e, E>
+
+impl<'e, E> VoteDb<'e, E>
 where E: Executor<'e, Database=sqlx::Postgres> + Copy {
     pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
     {
@@ -100,7 +102,7 @@ mod tests {
         PgPoolOptions,
     };
 
-    const DATABASE_URL: &str = "DATABASE_URL";
+    const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
 
     #[tokio::test]
     async fn test_put_poll() {
@@ -111,7 +113,7 @@ mod tests {
             .await
             .unwrap();
 
-        let client: VoteDbClient<'_, &PgPool> = VoteDbClient{db: &pool, _p: PhantomData};
+        let client: VoteDb<'_, &PgPool> = VoteDb {db: &pool, _p: PhantomData};
         let mock_poll_row = Poll {
             id: thread_rng().sample_iter(&Alphanumeric).take(10).collect(),
             name: String::from("My poll"),

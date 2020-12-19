@@ -1,4 +1,4 @@
-CREATE TABLE poll
+DATABASE_URL=postgresql://postgres:a@localhost:5432 cargo testCREATE TABLE poll
 (
     id character varying NOT NULL,
     name character varying NOT NULL,
