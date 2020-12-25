@@ -1,4 +1,5 @@
-use async_trait::async_trait;
+use std::marker::PhantomData;
+
 use chrono::{
     DateTime,
     offset::Utc,
@@ -6,12 +7,9 @@ use chrono::{
 use sqlx::{
     Connection,
     Executor,
-    postgres::PgPool,
 };
-use std::marker::PhantomData;
 
-pub struct VoteDb<'e, E>
-where E: Executor<'e> {
+pub struct VoteDb<'e, E> {
     db: E,
     _p: PhantomData<&'e E>
 }
@@ -52,9 +50,12 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-
 impl<'e, E> VoteDb<'e, E>
 where E: Executor<'e, Database=sqlx::Postgres> + Copy {
+    pub fn new(db: E) -> VoteDb<'e, E> {
+        VoteDb{db, _p: PhantomData}
+    }
+
     pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
     {
         let query = sqlx::query(
@@ -75,7 +76,8 @@ where E: Executor<'e, Database=sqlx::Postgres> + Copy {
 
     pub async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
         let query = sqlx::query_as::<_, Poll>(
-            "select id, name, description, owner_id, expires, close from poll where id=$1",
+            "select id, name, description, owner_id, expires, close \
+            from poll where id=$1",
         ).bind(id);
 
         let poll = query.fetch_optional(self.db).await?;
@@ -86,21 +88,23 @@ where E: Executor<'e, Database=sqlx::Postgres> + Copy {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::{
         any::Any,
         env,
     };
+
     use chrono::SubsecRound;
     use rand::{
-        thread_rng,
         distributions::Alphanumeric,
         Rng,
+        thread_rng,
     };
     use sqlx::postgres::{
         PgPool,
         PgPoolOptions,
     };
+
+    use super::*;
 
     const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
 
