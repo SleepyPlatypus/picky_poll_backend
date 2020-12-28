@@ -58,8 +58,8 @@ pub trait PickyDb {
 }
 
 impl<'e, E> PickyDbImpl<'e, E>
-    where E: Executor<'e, Database=sqlx::Postgres> + Copy {
-    pub fn new(db: E) -> PickyDbImpl<'e, E> {
+    where E: Executor<'e, Database=sqlx::Postgres> + Copy + Sync + 'e {
+    pub fn new(db: E) -> impl PickyDb + 'e {
         PickyDbImpl{ db, _p: PhantomData }
     }
 }
