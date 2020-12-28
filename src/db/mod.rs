@@ -1,5 +1,6 @@
-use std::marker::PhantomData;
 
+use async_trait::async_trait;
+use std::marker::PhantomData;
 use chrono::{
     DateTime,
     offset::Utc,
@@ -9,7 +10,7 @@ use sqlx::{
     Executor,
 };
 
-pub struct VoteDb<'e, E> {
+pub struct PickyDbImpl<'e, E> {
     db: E,
     _p: PhantomData<&'e E>
 }
@@ -50,13 +51,23 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-impl<'e, E> VoteDb<'e, E>
-where E: Executor<'e, Database=sqlx::Postgres> + Copy {
-    pub fn new(db: E) -> VoteDb<'e, E> {
-        VoteDb{db, _p: PhantomData}
-    }
+#[async_trait]
+pub trait PickyDb {
+    async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>;
+    async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr>;
+}
 
-    pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
+impl<'e, E> PickyDbImpl<'e, E>
+    where E: Executor<'e, Database=sqlx::Postgres> + Copy {
+    pub fn new(db: E) -> PickyDbImpl<'e, E> {
+        PickyDbImpl{ db, _p: PhantomData }
+    }
+}
+
+#[async_trait]
+impl<'e, E> PickyDb for PickyDbImpl<'e, E>
+where E: Executor<'e, Database=sqlx::Postgres> + Copy + Sync {
+    async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
     {
         let query = sqlx::query(
                 "insert \
@@ -74,7 +85,7 @@ where E: Executor<'e, Database=sqlx::Postgres> + Copy {
         Ok(())
     }
 
-    pub async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
+    async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
         let query = sqlx::query_as::<_, Poll>(
             "select id, name, description, owner_id, expires, close \
             from poll where id=$1",
@@ -117,7 +128,7 @@ mod tests {
             .await
             .unwrap();
 
-        let client: VoteDb<'_, &PgPool> = VoteDb {db: &pool, _p: PhantomData};
+        let client = PickyDbImpl::new(&pool);
         let mock_poll_row = Poll {
             id: thread_rng().sample_iter(&Alphanumeric).take(10).collect(),
             name: String::from("My poll"),
