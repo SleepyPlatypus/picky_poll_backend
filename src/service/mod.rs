@@ -1,15 +1,17 @@
 mod operations;
-// mod paths;
+mod paths;
 
 use chrono::{Duration, offset::Utc, DateTime};
+use serde::{Deserialize, Serialize};
 use super::db;
 
-#[derive(Clone)]
+#[derive(Clone, Deserialize, Serialize)]
 struct PostPollRequest {
     name: String,
     description: String,
 }
 
+#[derive(Serialize, Deserialize)]
 struct GetPollResponse {
     id: String,
     name: String,
@@ -18,6 +20,7 @@ struct GetPollResponse {
     close: Option<DateTime<Utc>>,
 }
 
+#[derive(Clone, Serialize, Deserialize)]
 struct PostPollResponse {
     id: String,
 }

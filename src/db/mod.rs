@@ -6,7 +6,6 @@ use chrono::{
     offset::Utc,
 };
 use sqlx::{
-    Connection,
     Executor,
 };
 
@@ -100,7 +99,6 @@ where E: Executor<'e, Database=sqlx::Postgres> + Copy + Sync {
 #[cfg(test)]
 mod tests {
     use std::{
-        any::Any,
         env,
     };
 
@@ -111,7 +109,6 @@ mod tests {
         thread_rng,
     };
     use sqlx::postgres::{
-        PgPool,
         PgPoolOptions,
     };
 
