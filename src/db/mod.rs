@@ -1,17 +1,13 @@
 
-use async_trait::async_trait;
-use std::marker::PhantomData;
 use chrono::{
     DateTime,
     offset::Utc,
 };
-use sqlx::{
-    Executor,
-};
+use sqlx::{Executor, PgPool};
 
-pub struct PickyDbImpl<'e, E> {
-    db: E,
-    _p: PhantomData<&'e E>
+#[derive(Clone)]
+pub struct PickyDb<'p> {
+    pool: &'p PgPool
 }
 
 type Timestamp = DateTime<Utc>;
@@ -50,47 +46,36 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-#[async_trait]
-pub trait PickyDb {
-    async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>;
-    async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr>;
-}
-
-impl<'e, E> PickyDbImpl<'e, E>
-    where E: Executor<'e, Database=sqlx::Postgres> + Copy + Sync + 'e {
-    pub fn new(db: E) -> impl PickyDb + 'e {
-        PickyDbImpl{ db, _p: PhantomData }
+impl<'p> PickyDb<'p> {
+    pub fn new(dbPool: &PgPool) -> PickyDb {
+        PickyDb{ pool: dbPool }
     }
-}
 
-#[async_trait]
-impl<'e, E> PickyDb for PickyDbImpl<'e, E>
-where E: Executor<'e, Database=sqlx::Postgres> + Copy + Sync {
-    async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
+    pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
     {
         let query = sqlx::query(
-                "insert \
+            "insert \
                 into poll(id, name, description, owner_id, expires, close) \
                 values ($1, $2, $3, $4, $5, $6)"
-            ).bind(&poll.id)
+        ).bind(&poll.id)
             .bind(&poll.name)
             .bind(&poll.description)
             .bind(&poll.owner_id)
             .bind(poll.expires)
             .bind(poll.close);
 
-        let complete = self.db.execute(query).await;
+        let complete = self.pool.execute(query).await;
         complete?;
         Ok(())
     }
 
-    async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
+    pub async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
         let query = sqlx::query_as::<_, Poll>(
             "select id, name, description, owner_id, expires, close \
             from poll where id=$1",
         ).bind(id);
 
-        let poll = query.fetch_optional(self.db).await?;
+        let poll = query.fetch_optional(self.pool).await?;
 
         poll.ok_or(GetPollErr::NotFound)
     }
@@ -125,7 +110,7 @@ mod tests {
             .await
             .unwrap();
 
-        let client = PickyDbImpl::new(&pool);
+        let client = PickyDb::new(&pool);
         let mock_poll_row = Poll {
             id: thread_rng().sample_iter(&Alphanumeric).take(10).collect(),
             name: String::from("My poll"),

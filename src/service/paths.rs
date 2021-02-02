@@ -25,7 +25,7 @@ async fn post_poll_handler<A: 'static + PollOperations>(ops: web::Data<A>,
         .map(|r| web::Json(r))
 }
 
-fn post_poll<A: 'static + PollOperations>() -> Resource {
+pub fn post_poll<A: 'static + PollOperations>() -> Resource {
     web::resource(POLLS)
         .route(web::post().to(post_poll_handler::<A>))
 }

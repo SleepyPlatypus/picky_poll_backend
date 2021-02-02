@@ -1,5 +1,5 @@
-mod operations;
-mod paths;
+pub mod operations;
+pub mod paths;
 
 use chrono::{Duration, offset::Utc, DateTime};
 use serde::{Deserialize, Serialize};

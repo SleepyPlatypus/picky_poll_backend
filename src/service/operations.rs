@@ -12,8 +12,17 @@ use rand::{
 };
 use mockall::automock;
 
-struct PollOperationsImpl<'d, D> {
-    db: &'d D,
+#[derive(Clone)]
+pub struct PollOperationsImpl<'d> {
+    db: &'d PickyDb<'d>,
+}
+
+impl<'d> PollOperationsImpl<'d> {
+    pub fn new(db: &'d PickyDb<'d>) -> PollOperationsImpl<'d> {
+        PollOperationsImpl {
+            db
+        }
+    }
 }
 
 #[cfg_attr(test, automock)]
@@ -25,8 +34,7 @@ pub trait PollOperations {
 }
 
 #[async_trait]
-impl<'d, D> PollOperations for PollOperationsImpl<'d, D>
-where D: PickyDb + Sync {
+impl<'d> PollOperations for PollOperationsImpl<'d> {
 
     async fn post_poll(&self, user: &Identity, request: PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>
@@ -68,7 +76,7 @@ mod tests {
     use sqlx::postgres::{
         PgPoolOptions,
     };
-    use super::db::PickyDbImpl;
+    use super::db::PickyDb;
     use Clone;
     use super::*;
 
@@ -83,7 +91,7 @@ mod tests {
             .await
             .unwrap();
 
-        let client = PickyDbImpl::new(&pool);
+        let client = PickyDb::new(&pool);
         let service = PollOperationsImpl {db: &client};
 
         let mock_user = Identity::SecretKey("test user".to_string());
