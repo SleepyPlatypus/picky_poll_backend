@@ -10,7 +10,6 @@ use rand::{
     Rng,
     thread_rng
 };
-use mockall::automock;
 
 #[derive(Clone)]
 pub struct PollOperationsImpl {

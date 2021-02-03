@@ -1,10 +1,8 @@
 use super::*;
 use super::operations::*;
-use async_trait::async_trait;
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder, Resource};
-use tokio::prelude;
-use actix_web::http::StatusCode;
+use actix_web::{web, HttpResponse, Responder, Resource};
 use actix_web::web::Data;
+use actix_web::http::StatusCode;
 
 const POLLS: &str = "/polls";
 

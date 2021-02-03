@@ -46,8 +46,8 @@ impl From<sqlx::Error> for GetPollErr {
 }
 
 impl PickyDb {
-    pub fn new(dbPool: PgPool) -> PickyDb {
-        PickyDb{ pool: dbPool }
+    pub fn new(db_pool: PgPool) -> PickyDb {
+        PickyDb{ pool: db_pool }
     }
 
     pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>

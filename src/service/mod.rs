@@ -6,13 +6,13 @@ use serde::{Deserialize, Serialize};
 use super::db;
 
 #[derive(Clone, Deserialize, Serialize)]
-struct PostPollRequest {
+pub struct PostPollRequest {
     name: String,
     description: String,
 }
 
 #[derive(Serialize, Deserialize)]
-struct GetPollResponse {
+pub struct GetPollResponse {
     id: String,
     name: String,
     description: String,
@@ -21,16 +21,16 @@ struct GetPollResponse {
 }
 
 #[derive(Clone, Serialize, Deserialize)]
-struct PostPollResponse {
+pub struct PostPollResponse {
     id: String,
 }
 
-enum Identity {
+pub enum Identity {
     SecretKey(String),
 }
 
 #[derive(Debug)]
-enum PostPollError {
+pub enum PostPollError {
     Conflict,
     Error(sqlx::Error),
 }
@@ -45,7 +45,7 @@ impl From<db::PutPollErr> for PostPollError {
 }
 
 #[derive(Debug)]
-enum GetPollError {
+pub enum GetPollError {
     NotFound,
     Error(sqlx::Error),
 }
