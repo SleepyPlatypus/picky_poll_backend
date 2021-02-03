@@ -15,7 +15,7 @@ use sqlx::{Postgres, Pool};
 
 const DB_URL: &str = "PICKYPOLL_DB_URL";
 
-#[tokio::main]
+#[actix_web::main]
 async fn main() {
     let db_url = &env::var(&DB_URL).unwrap();
     let pool = PgPoolOptions::new()
@@ -24,14 +24,14 @@ async fn main() {
         .await
         .unwrap();
 
-    let db = PickyDb::new(&pool);
-    let ops = service::operations::PollOperationsImpl::new(&db);
-
-    HttpServer::new(move || {
+    let app = move || {
+        let db = PickyDb::new(pool.clone());
+        let ops = service::operations::PollOperationsImpl::new(db);
         App::new()
-            .data(Data::new(ops.clone()))
-            .service(paths::post_poll::<PollOperationsImpl>())
-    }).bind(("127.0.0.1", 8080))
+            //.data(Data::new(ops))
+            .service(paths::post_poll::<PollOperationsImpl>(ops))
+    };
+    HttpServer::new(app).bind(("127.0.0.1", 8080))
         .unwrap()
         .run()
         .await;

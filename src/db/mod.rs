@@ -4,10 +4,9 @@ use chrono::{
     offset::Utc,
 };
 use sqlx::{Executor, PgPool};
-
 #[derive(Clone)]
-pub struct PickyDb<'p> {
-    pool: &'p PgPool
+pub struct PickyDb {
+    pool: PgPool
 }
 
 type Timestamp = DateTime<Utc>;
@@ -46,8 +45,8 @@ impl From<sqlx::Error> for GetPollErr {
     }
 }
 
-impl<'p> PickyDb<'p> {
-    pub fn new(dbPool: &PgPool) -> PickyDb {
+impl PickyDb {
+    pub fn new(dbPool: PgPool) -> PickyDb {
         PickyDb{ pool: dbPool }
     }
 
@@ -75,7 +74,7 @@ impl<'p> PickyDb<'p> {
             from poll where id=$1",
         ).bind(id);
 
-        let poll = query.fetch_optional(self.pool).await?;
+        let poll = query.fetch_optional(&self.pool).await?;
 
         poll.ok_or(GetPollErr::NotFound)
     }
@@ -110,7 +109,7 @@ mod tests {
             .await
             .unwrap();
 
-        let client = PickyDb::new(&pool);
+        let client = PickyDb::new(pool);
         let mock_poll_row = Poll {
             id: thread_rng().sample_iter(&Alphanumeric).take(10).collect(),
             name: String::from("My poll"),

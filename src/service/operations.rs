@@ -13,12 +13,12 @@ use rand::{
 use mockall::automock;
 
 #[derive(Clone)]
-pub struct PollOperationsImpl<'d> {
-    db: &'d PickyDb<'d>,
+pub struct PollOperationsImpl {
+    db: PickyDb,
 }
 
-impl<'d> PollOperationsImpl<'d> {
-    pub fn new(db: &'d PickyDb<'d>) -> PollOperationsImpl<'d> {
+impl PollOperationsImpl {
+    pub fn new(db: PickyDb) -> PollOperationsImpl {
         PollOperationsImpl {
             db
         }
@@ -34,7 +34,7 @@ pub trait PollOperations {
 }
 
 #[async_trait]
-impl<'d> PollOperations for PollOperationsImpl<'d> {
+impl PollOperations for PollOperationsImpl {
 
     async fn post_poll(&self, user: &Identity, request: PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>
@@ -77,7 +77,6 @@ mod tests {
         PgPoolOptions,
     };
     use super::db::PickyDb;
-    use Clone;
     use super::*;
 
     const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
@@ -91,8 +90,8 @@ mod tests {
             .await
             .unwrap();
 
-        let client = PickyDb::new(&pool);
-        let service = PollOperationsImpl {db: &client};
+        let client = PickyDb::new(pool);
+        let service = PollOperationsImpl {db: client};
 
         let mock_user = Identity::SecretKey("test user".to_string());
 

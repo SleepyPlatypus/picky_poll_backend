@@ -1,0 +1,5 @@
+{
+  "//": "post to localhost:8080/polls",
+  "name": "Dessert",
+  "description": "Which dessert shall be served?"
+}
