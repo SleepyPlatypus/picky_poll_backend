@@ -1,6 +1,5 @@
-
-use super::*;
-use super::db::{
+use crate::model::*;
+use crate::db::{
     self,
     PickyDb,
 };
@@ -11,6 +10,37 @@ use rand::{
     thread_rng
 };
 use mockall::automock;
+use chrono::{Utc, Duration};
+
+#[derive(Debug)]
+pub enum PostPollError {
+    Conflict,
+    Error(sqlx::Error),
+}
+
+impl From<db::PutPollErr> for PostPollError {
+    fn from(e : db::PutPollErr) -> Self {
+        match e {
+            db::PutPollErr::PostgresErr(e) => PostPollError::Error(e),
+            db::PutPollErr::Conflict => PostPollError::Conflict,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum GetPollError {
+    NotFound,
+    Error(sqlx::Error),
+}
+
+impl From<db::GetPollErr> for GetPollError {
+    fn from(e: db::GetPollErr) -> Self {
+        match e {
+            db::GetPollErr::PostgresErr(e) => GetPollError::Error(e),
+            db::GetPollErr::NotFound => GetPollError::NotFound,
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct PollOperationsImpl {
@@ -76,7 +106,7 @@ mod tests {
     use sqlx::postgres::{
         PgPoolOptions,
     };
-    use super::db::PickyDb;
+    use crate::db::PickyDb;
     use super::*;
 
     const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";

@@ -1,7 +1,9 @@
-use super::*;
-use super::operations::*;
-use actix_web::{web, HttpResponse, Resource, HttpRequest};
+use actix_web::{HttpRequest, HttpResponse, Resource, web};
 use actix_web::web::{Data, Json};
+
+use crate::operations::*;
+
+use super::*;
 
 const POLLS: &str = "/polls";
 
@@ -37,11 +39,14 @@ pub fn post_poll<A: 'static + PollOperations>(ops: A) -> Resource {
 
 #[cfg(test)]
 mod tests {
+    use actix_web::App;
+    use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
-    use actix_web::App;
+
+    use crate::operations;
+
     use super::*;
-    use actix_web::http::Method;
 
     #[tokio::test]
     async fn test_post_poll() {

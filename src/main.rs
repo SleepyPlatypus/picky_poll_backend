@@ -1,15 +1,16 @@
-mod db;
-mod service;
-
 use std::env;
 
 use actix_web::{App, HttpServer};
-use db::PickyDb;
-use service::{
-    operations::PollOperationsImpl,
-    paths,
-};
 use sqlx::postgres::PgPoolOptions;
+
+use db::PickyDb;
+use operations::PollOperationsImpl;
+
+mod model;
+pub use model::*;
+mod paths;
+mod db;
+pub mod operations;
 
 const DB_URL: &str = "PICKYPOLL_DB_URL";
 
@@ -24,7 +25,7 @@ async fn main() {
 
     let app = move || {
         let db = PickyDb::new(pool.clone());
-        let ops = service::operations::PollOperationsImpl::new(db);
+        let ops = operations::PollOperationsImpl::new(db);
         App::new()
             .service(paths::post_poll::<PollOperationsImpl>(ops))
     };
