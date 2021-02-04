@@ -50,7 +50,7 @@ impl PickyDb {
         PickyDb{ pool: db_pool }
     }
 
-    pub async fn put_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
+    pub async fn insert_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
     {
         let query = sqlx::query(
             "insert \
@@ -68,7 +68,7 @@ impl PickyDb {
         Ok(())
     }
 
-    pub async fn get_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
+    pub async fn select_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
         let query = sqlx::query_as::<_, Poll>(
             "select id, name, description, owner_id, expires, close \
             from poll where id=$1",
@@ -119,8 +119,8 @@ mod tests {
             expires: Utc::now().round_subsecs(0),
         };
  
-        client.put_poll(&mock_poll_row).await.unwrap();
-        let got_poll = client.get_poll(&mock_poll_row.id).await.unwrap();
+        client.insert_poll(&mock_poll_row).await.unwrap();
+        let got_poll = client.select_poll(&mock_poll_row.id).await.unwrap();
 
         assert_eq!(mock_poll_row, got_poll)
     }

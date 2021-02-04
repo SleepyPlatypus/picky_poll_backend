@@ -1,28 +1,32 @@
 use super::*;
 use super::operations::*;
-use actix_web::{web, HttpResponse, Responder, Resource};
-use actix_web::web::Data;
-use actix_web::http::StatusCode;
+use actix_web::{web, HttpResponse, Resource, HttpRequest};
+use actix_web::web::{Data, Json};
 
 const POLLS: &str = "/polls";
 
-async fn post_poll_handler<A: 'static + PollOperations>(ops: web::Data<A>,
-                            body: web::Json<PostPollRequest>,
-                            request: web::HttpRequest) -> impl Responder
+async fn post_poll_handler<A: 'static + PollOperations>(ops: Data<A>,
+                            body: Json<PostPollRequest>,
+                            request: HttpRequest) -> Result<Json<PostPollResponse>, actix_web::Error>
 {
     let key = request
         .headers()
         .get("SECRET-KEY")
-        .unwrap()
-        .to_str()
-        .unwrap();
-    let id = Identity::SecretKey(key.to_string());
-    ops.post_poll(&id, body.0)
+        .ok_or_else(||
+            actix_web::Error::from(HttpResponse::BadRequest().body("Missing SECRET-KEY"))
+        )?;
+    let id = Identity::SecretKey(
+        key.to_str()
+            .map_err(|_|
+                actix_web::Error::from(HttpResponse::InternalServerError().body("Bad SECRET-KEY"))
+            )?
+            .to_string());
+    let ok = ops.post_poll(&id, body.0)
         .await
-        .map_err(|e|{
-            HttpResponse::build(StatusCode::INTERNAL_SERVER_ERROR).body(format!("{:?}", e))
-        })
-        .map(|r| web::Json(r))
+        .map_err(|_|{
+            actix_web::Error::from(HttpResponse::InternalServerError())
+        })?;
+    Ok(Json(ok))
 }
 
 pub fn post_poll<A: 'static + PollOperations>(ops: A) -> Resource {
@@ -33,8 +37,9 @@ pub fn post_poll<A: 'static + PollOperations>(ops: A) -> Resource {
 
 #[cfg(test)]
 mod tests {
+    use actix_web::http::StatusCode;
     use actix_web::test;
-    use Clone;
+    use actix_web::App;
     use super::*;
     use actix_web::http::Method;
 
@@ -49,20 +54,22 @@ mod tests {
 
         let mut app = test::init_service(
             App::new()
-                .data(mock_ops)
-                .service(post_poll::<operations::MockPollOperations>())
+                .service(post_poll::<operations::MockPollOperations>(mock_ops))
         ).await;
 
-        let requestBody = PostPollRequest{ name: "test name".to_string(), description: "test description".to_string() };
-        let request = test::TestRequest::with_header("SECRET_KEY", "my_secret")
+        let request_body = PostPollRequest{
+            name: "test name".to_string(),
+            description: "test description".to_string()
+        };
+        let request = test::TestRequest::with_header("SECRET-KEY", "my_secret")
             .uri("/polls")
-            .set_json(&requestBody)
+            .set_json(&request_body)
             .method(Method::POST)
             .to_request();
-        let mut response = test::call_service(&mut app, request).await;
+        let response = test::call_service(&mut app, request).await;
 
-        assert_eq!(response.status(), StatusCode::OK);
-        let responseBody: PostPollResponse = test::read_body_json(response).await;
-        assert_eq!(mock_poll_id, responseBody.id);
+        assert_eq!(StatusCode::OK, response.status());
+        let response_body: PostPollResponse = test::read_body_json(response).await;
+        assert_eq!(mock_poll_id, response_body.id);
     }
 }

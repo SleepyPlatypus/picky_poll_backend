@@ -10,6 +10,7 @@ use rand::{
     Rng,
     thread_rng
 };
+use mockall::automock;
 
 #[derive(Clone)]
 pub struct PollOperationsImpl {
@@ -39,7 +40,7 @@ impl PollOperations for PollOperationsImpl {
                        -> Result<PostPollResponse, PostPollError>
     {
         let poll_id = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
-        let owner_id_str = match user { Identity::SecretKey(s) => s};
+        let Identity::SecretKey(owner_id_str) = user;
         let expires = Utc::now() + Duration::days(7);
 
         let row = db::Poll {
@@ -51,13 +52,13 @@ impl PollOperations for PollOperationsImpl {
             close: None
         };
 
-        self.db.put_poll(&row).await?;
+        self.db.insert_poll(&row).await?;
 
         Ok(PostPollResponse {id: row.id})
     }
 
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError> {
-        let row: db::Poll = self.db.get_poll(id).await?;
+        let row: db::Poll = self.db.select_poll(id).await?;
 
         Ok(GetPollResponse {
             id: row.id,
@@ -99,10 +100,14 @@ mod tests {
             description: "test poll description".to_string(),
         };
         let post_poll_response = service
-            .post_poll(&mock_user, post_poll_request.clone()).await.unwrap();
+            .post_poll(&mock_user, post_poll_request.clone())
+            .await
+            .unwrap();
 
         let get_poll_response = service
-            .get_poll(post_poll_response.id.as_str()).await.unwrap();
+            .get_poll(post_poll_response.id.as_str())
+            .await
+            .unwrap();
 
         assert_eq!(post_poll_request.name, get_poll_response.name)
     }
