@@ -1,11 +1,11 @@
 use actix_web::{HttpRequest, HttpResponse, Resource, web};
 use actix_web::web::{Data, Json};
 
+use crate::model::*;
 use crate::operations::*;
 
-use super::*;
-
 const POLLS: &str = "/polls";
+const SECRET_KEY: &str = "SECRET-KEY";
 
 async fn post_poll_handler<A: 'static + PollOperations>(ops: Data<A>,
                             body: Json<PostPollRequest>,
@@ -14,16 +14,19 @@ async fn post_poll_handler<A: 'static + PollOperations>(ops: Data<A>,
     let key = request
         .headers()
         .get("SECRET-KEY")
-        .ok_or_else(||
-            actix_web::Error::from(HttpResponse::BadRequest().body("Missing SECRET-KEY"))
-        )?;
+        .ok_or_else(|| {
+            let msg = format!("Missing header: {}", SECRET_KEY);
+            actix_web::Error::from(HttpResponse::BadRequest().body(msg))
+        })?;
     let id = Identity::SecretKey(
         key.to_str()
-            .map_err(|_|
-                actix_web::Error::from(HttpResponse::InternalServerError().body("Bad SECRET-KEY"))
-            )?
+            .map_err(|_| {
+                let msg = format!("Failed to handle header value for {}", SECRET_KEY);
+                actix_web::Error::from(HttpResponse::InternalServerError().body(msg))
+            })?
             .to_string());
-    let ok = ops.post_poll(&id, body.0)
+    let Json(requestBody) = body;
+    let ok = ops.post_poll(&id, requestBody)
         .await
         .map_err(|_|{
             actix_web::Error::from(HttpResponse::InternalServerError())
@@ -66,8 +69,8 @@ mod tests {
             name: "test name".to_string(),
             description: "test description".to_string()
         };
-        let request = test::TestRequest::with_header("SECRET-KEY", "my_secret")
-            .uri("/polls")
+        let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
+            .uri(POLLS)
             .set_json(&request_body)
             .method(Method::POST)
             .to_request();

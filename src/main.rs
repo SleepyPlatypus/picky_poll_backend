@@ -7,10 +7,9 @@ use db::PickyDb;
 use operations::PollOperationsImpl;
 
 mod model;
-pub use model::*;
 mod paths;
 mod db;
-pub mod operations;
+mod operations;
 
 const DB_URL: &str = "PICKYPOLL_DB_URL";
 
