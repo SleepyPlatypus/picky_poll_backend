@@ -26,7 +26,8 @@ async fn main() {
         let db = PickyDb::new(pool.clone());
         let ops = operations::PollOperationsImpl::new(db);
         App::new()
-            .service(paths::post_poll::<PollOperationsImpl>(ops))
+            .data(ops)
+            .configure(paths::config::<PollOperationsImpl>)
     };
     HttpServer::new(app).bind(("127.0.0.1", 8080))
         .unwrap()

@@ -9,8 +9,10 @@ use rand::{
     Rng,
     thread_rng
 };
-use mockall::automock;
 use chrono::{Utc, Duration};
+
+#[cfg(test)]
+use mockall::automock;
 
 #[derive(Debug)]
 pub enum PostPollError {

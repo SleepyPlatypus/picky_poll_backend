@@ -1,12 +1,13 @@
-use actix_web::{HttpRequest, HttpResponse, Resource, Result, web, FromRequest, Error};
-use actix_web::web::{Data, Json, Path};
+use actix_web::{HttpRequest, HttpResponse, Result, web, FromRequest, Error};
+use actix_web::web::{Data, Json, Path, ServiceConfig};
 
 use crate::model::*;
 use crate::operations::*;
 use actix_web::dev::{PayloadStream, Payload};
-use std::future::{Future, Ready, ready};
+use std::future::{Ready, ready};
 
-const POLLS: &str = "/polls";
+const POST_POLLS_PATH: &str = "/polls";
+const GET_POLLS_PATH: &str = "/polls/{poll_id}";
 const SECRET_KEY: &str = "SECRET-KEY";
 
 impl FromRequest for Identity {
@@ -66,10 +67,10 @@ async fn post_poll_handler<A: 'static + PollOperations>(
     Ok(Json(ok))
 }
 
-pub fn post_poll<A: 'static + PollOperations>(ops: A) -> Resource {
-    web::resource(POLLS)
-        .app_data(Data::new(ops))
-        .route(web::post().to(post_poll_handler::<A>))
+pub fn config<A: 'static + PollOperations>(cfg: &mut ServiceConfig) {
+    cfg.route(POST_POLLS_PATH, web::post().to(post_poll_handler::<A>))
+        .route(GET_POLLS_PATH, web::get().to(get_poll_handler::<A>))
+    ;
 }
 
 #[cfg(test)]
@@ -94,7 +95,8 @@ mod tests {
 
         let mut app = test::init_service(
             App::new()
-                .service(post_poll::<operations::MockPollOperations>(mock_ops))
+                .data(mock_ops)
+                .configure(config::<MockPollOperations>)
         ).await;
 
         let request_body = PostPollRequest{
@@ -102,7 +104,7 @@ mod tests {
             description: "test description".to_string()
         };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
-            .uri(POLLS)
+            .uri(POST_POLLS_PATH)
             .set_json(&request_body)
             .method(Method::POST)
             .to_request();
