@@ -22,26 +22,26 @@ pub struct Poll {
 }
 
 #[derive(Debug)]
-pub enum PutPollErr {
+pub enum InsertPollErr {
     PostgresErr(sqlx::Error),
     Conflict,
 }
 
-impl From<sqlx::Error> for PutPollErr {
-    fn from(e: sqlx::Error) -> PutPollErr {
-        PutPollErr::PostgresErr(e)
+impl From<sqlx::Error> for InsertPollErr {
+    fn from(e: sqlx::Error) -> InsertPollErr {
+        InsertPollErr::PostgresErr(e)
     }
 }
 
 #[derive(Debug)]
-pub enum GetPollErr {
+pub enum SelectPollErr {
     NotFound,
     PostgresErr(sqlx::Error),
 }
 
-impl From<sqlx::Error> for GetPollErr {
-    fn from(e: sqlx::Error) -> GetPollErr {
-        GetPollErr::PostgresErr(e)
+impl From<sqlx::Error> for SelectPollErr {
+    fn from(e: sqlx::Error) -> SelectPollErr {
+        SelectPollErr::PostgresErr(e)
     }
 }
 
@@ -50,7 +50,7 @@ impl PickyDb {
         PickyDb{ pool: db_pool }
     }
 
-    pub async fn insert_poll(&self, poll: &Poll) -> Result<(), PutPollErr>
+    pub async fn insert_poll(&self, poll: &Poll) -> Result<(), InsertPollErr>
     {
         let query = sqlx::query(
             "insert \
@@ -68,7 +68,7 @@ impl PickyDb {
         Ok(())
     }
 
-    pub async fn select_poll(&self, id: &str) -> Result<Poll, GetPollErr> {
+    pub async fn select_poll(&self, id: &str) -> Result<Poll, SelectPollErr> {
         let query = sqlx::query_as::<_, Poll>(
             "select id, name, description, owner_id, expires, close \
             from poll where id=$1",
@@ -76,7 +76,7 @@ impl PickyDb {
 
         let poll = query.fetch_optional(&self.pool).await?;
 
-        poll.ok_or(GetPollErr::NotFound)
+        poll.ok_or(SelectPollErr::NotFound)
     }
 }
 
@@ -112,8 +112,8 @@ mod tests {
         let client = PickyDb::new(pool);
         let mock_poll_row = Poll {
             id: thread_rng().sample_iter(&Alphanumeric).take(10).collect(),
-            name: String::from("My poll"),
-            description: String::from("what a great poll"),
+            name: String::from("Dessert"),
+            description: String::from("What shall be served for dessert? 🍦🍪🎂"),
             owner_id: String::from("A"),
             close: None,
             expires: Utc::now().round_subsecs(0),

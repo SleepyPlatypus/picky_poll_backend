@@ -20,11 +20,11 @@ pub enum PostPollError {
     Error(sqlx::Error),
 }
 
-impl From<db::PutPollErr> for PostPollError {
-    fn from(e : db::PutPollErr) -> Self {
+impl From<db::InsertPollErr> for PostPollError {
+    fn from(e : db::InsertPollErr) -> Self {
         match e {
-            db::PutPollErr::PostgresErr(e) => PostPollError::Error(e),
-            db::PutPollErr::Conflict => PostPollError::Conflict,
+            db::InsertPollErr::PostgresErr(e) => PostPollError::Error(e),
+            db::InsertPollErr::Conflict => PostPollError::Conflict,
         }
     }
 }
@@ -35,11 +35,11 @@ pub enum GetPollError {
     Error(sqlx::Error),
 }
 
-impl From<db::GetPollErr> for GetPollError {
-    fn from(e: db::GetPollErr) -> Self {
+impl From<db::SelectPollErr> for GetPollError {
+    fn from(e: db::SelectPollErr) -> Self {
         match e {
-            db::GetPollErr::PostgresErr(e) => GetPollError::Error(e),
-            db::GetPollErr::NotFound => GetPollError::NotFound,
+            db::SelectPollErr::PostgresErr(e) => GetPollError::Error(e),
+            db::SelectPollErr::NotFound => GetPollError::NotFound,
         }
     }
 }
