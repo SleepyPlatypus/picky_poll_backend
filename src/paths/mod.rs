@@ -1,35 +1,67 @@
-use actix_web::{HttpRequest, HttpResponse, Resource, web};
-use actix_web::web::{Data, Json};
+use actix_web::{HttpRequest, HttpResponse, Resource, Result, web, FromRequest, Error};
+use actix_web::web::{Data, Json, Path};
 
 use crate::model::*;
 use crate::operations::*;
+use actix_web::dev::{PayloadStream, Payload};
+use std::future::{Future, Ready, ready};
 
 const POLLS: &str = "/polls";
 const SECRET_KEY: &str = "SECRET-KEY";
 
-async fn post_poll_handler<A: 'static + PollOperations>(ops: Data<A>,
-                            body: Json<PostPollRequest>,
-                            request: HttpRequest) -> Result<Json<PostPollResponse>, actix_web::Error>
+impl FromRequest for Identity {
+    type Error = Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+    type Config = ();
+
+    fn from_request(req: &HttpRequest, _: &mut Payload<PayloadStream>) -> Self::Future {
+        let id = req.headers()
+            .get("SECRET-KEY")
+            .ok_or_else(||{
+                let msg = format!("Missing header: {}", SECRET_KEY);
+                Error::from(HttpResponse::BadRequest().body(msg))
+            }).and_then(|header_value|
+                header_value
+                    .to_str()
+                    .map_err(|_| {
+                        let msg = format!("Failed to handle header value for {}", SECRET_KEY);
+                        Error::from(HttpResponse::InternalServerError().body(msg))
+                    })
+            ).map(|secret_key| {
+                Identity::SecretKey(secret_key.to_string())
+            });
+
+        ready(id)
+    }
+}
+
+async fn get_poll_handler<A: 'static + PollOperations>(
+    ops: Data<A>,
+    path: Path<String>) -> Result<Json<GetPollResponse>>
 {
-    let key = request
-        .headers()
-        .get("SECRET-KEY")
-        .ok_or_else(|| {
-            let msg = format!("Missing header: {}", SECRET_KEY);
-            actix_web::Error::from(HttpResponse::BadRequest().body(msg))
+    let poll = ops.get_poll(&path)
+        .await
+        .map_err(|e| {
+            match e {
+                GetPollError::NotFound =>
+                    Error::from(HttpResponse::NotFound()),
+                GetPollError::Error(_) =>
+                    Error::from(HttpResponse::InternalServerError()),
+            }
         })?;
-    let id = Identity::SecretKey(
-        key.to_str()
-            .map_err(|_| {
-                let msg = format!("Failed to handle header value for {}", SECRET_KEY);
-                actix_web::Error::from(HttpResponse::InternalServerError().body(msg))
-            })?
-            .to_string());
-    let Json(requestBody) = body;
-    let ok = ops.post_poll(&id, requestBody)
+    Ok(Json(poll))
+}
+
+async fn post_poll_handler<A: 'static + PollOperations>(
+    ops: Data<A>,
+    body: Json<PostPollRequest>,
+    id: Identity) -> Result<Json<PostPollResponse>>
+{
+    let Json(request_body) = body;
+    let ok = ops.post_poll(&id, request_body)
         .await
         .map_err(|_|{
-            actix_web::Error::from(HttpResponse::InternalServerError())
+            Error::from(HttpResponse::InternalServerError())
         })?;
     Ok(Json(ok))
 }
