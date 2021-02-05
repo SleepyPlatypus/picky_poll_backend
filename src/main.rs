@@ -8,7 +8,6 @@ use operations::PollOperationsImpl;
 use std::time::Duration;
 
 mod model;
-mod service;
 mod db;
 mod operations;
 
@@ -33,7 +32,6 @@ async fn main() {
         let ops = operations::PollOperationsImpl::new(db);
         App::new()
             .data(ops)
-            .configure(service::config::<PollOperationsImpl>)
     };
     HttpServer::new(app).bind(("127.0.0.1", 8080))
         .expect("HTTP server failed to bind to 8080")
