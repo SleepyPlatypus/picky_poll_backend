@@ -1,5 +1,5 @@
 # Picky Poll backend
-Porting the backend of [Picky Poll](pickypoll.com) to Rust.
+Porting the backend of [Picky Poll](https://pickypoll.com) to Rust.
 
 This port implements Creating+Reading polls. It is useless, until it allows creating ballots.
 # Developer Quickstart
