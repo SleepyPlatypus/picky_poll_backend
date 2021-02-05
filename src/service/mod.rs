@@ -1,13 +1,13 @@
 use actix_web::{HttpRequest, HttpResponse, Result, web, FromRequest, Error};
-use actix_web::web::{Data, Json, Path, ServiceConfig};
+use actix_web::dev::{Payload, PayloadStream};
+use actix_web::web::ServiceConfig;
+use std::future::{Ready, ready};
 
 use crate::model::*;
 use crate::operations::*;
-use actix_web::dev::{PayloadStream, Payload};
-use std::future::{Ready, ready};
 
-const POST_POLLS_PATH: &str = "/polls";
-const GET_POLLS_PATH: &str = "/polls/{poll_id}";
+mod paths;
+
 const SECRET_KEY: &str = "SECRET-KEY";
 
 impl FromRequest for Identity {
@@ -17,7 +17,7 @@ impl FromRequest for Identity {
 
     fn from_request(req: &HttpRequest, _: &mut Payload<PayloadStream>) -> Self::Future {
         let id = req.headers()
-            .get("SECRET-KEY")
+            .get(SECRET_KEY)
             .ok_or_else(||{
                 let msg = format!("Missing header: {}", SECRET_KEY);
                 Error::from(HttpResponse::BadRequest().body(msg))
@@ -25,51 +25,22 @@ impl FromRequest for Identity {
                 header_value
                     .to_str()
                     .map_err(|_| {
-                        let msg = format!("Failed to handle header value for {}", SECRET_KEY);
+                        let msg = format!("Non-ascii header value: {}", SECRET_KEY);
                         Error::from(HttpResponse::InternalServerError().body(msg))
                     })
             ).map(|secret_key| {
-                Identity::SecretKey(secret_key.to_string())
+                Identity::SecretKey(secret_key.to_owned())
             });
 
         ready(id)
     }
 }
 
-async fn get_poll_handler<A: 'static + PollOperations>(
-    ops: Data<A>,
-    path: Path<String>) -> Result<Json<GetPollResponse>>
-{
-    let poll = ops.get_poll(&path)
-        .await
-        .map_err(|e| {
-            match e {
-                GetPollError::NotFound =>
-                    Error::from(HttpResponse::NotFound()),
-                GetPollError::Error(_) =>
-                    Error::from(HttpResponse::InternalServerError()),
-            }
-        })?;
-    Ok(Json(poll))
-}
-
-async fn post_poll_handler<A: 'static + PollOperations>(
-    ops: Data<A>,
-    body: Json<PostPollRequest>,
-    id: Identity) -> Result<Json<PostPollResponse>>
-{
-    let Json(request_body) = body;
-    let ok = ops.post_poll(&id, request_body)
-        .await
-        .map_err(|_|{
-            Error::from(HttpResponse::InternalServerError())
-        })?;
-    Ok(Json(ok))
-}
-
 pub fn config<A: 'static + PollOperations>(cfg: &mut ServiceConfig) {
-    cfg.route(POST_POLLS_PATH, web::post().to(post_poll_handler::<A>))
-        .route(GET_POLLS_PATH, web::get().to(get_poll_handler::<A>))
+    cfg.route(paths::POST_POLLS_PATH,
+              web::post().to(paths::post_poll_handler::<A>))
+        .route(paths::GET_POLLS_PATH,
+               web::get().to(paths::get_poll_handler::<A>))
     ;
 }
 
@@ -104,7 +75,7 @@ mod tests {
             description: "test description".to_string()
         };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
-            .uri(POST_POLLS_PATH)
+            .uri(paths::POST_POLLS_PATH)
             .set_json(&request_body)
             .method(Method::POST)
             .to_request();

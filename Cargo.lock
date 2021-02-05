@@ -1346,6 +1346,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 
 [[package]]
+name = "picky_poll_backend"
+version = "0.1.0"
+dependencies = [
+ "actix-web",
+ "async-trait",
+ "chrono",
+ "mockall",
+ "rand",
+ "serde",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "pin-project"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2251,20 +2265,6 @@ name = "version_check"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
-
-[[package]]
-name = "vote-backend-2"
-version = "0.1.0"
-dependencies = [
- "actix-web",
- "async-trait",
- "chrono",
- "mockall",
- "rand",
- "serde",
- "sqlx",
- "tokio",
-]
 
 [[package]]
 name = "wasi"

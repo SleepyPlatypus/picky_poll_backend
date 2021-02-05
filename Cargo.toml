@@ -1,5 +1,5 @@
 [package]
-name = "vote-backend-2"
+name = "picky_poll_backend"
 version = "0.1.0"
 authors = ["Stephen <stephenmerc@gmail.com>"]
 edition = "2018"
