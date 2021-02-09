@@ -104,25 +104,13 @@ impl PollOperations for PollOperationsImpl {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
-    use sqlx::postgres::{
-        PgPoolOptions,
-    };
     use crate::db::PickyDb;
+    use super::db::test_db;
     use super::*;
-
-    const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
 
     #[tokio::test]
     async fn test_post_poll() {
-        let db_url = &env::var(&DATABASE_URL).unwrap();
-        let pool = PgPoolOptions::new()
-            .max_connections(1)
-            .connect(db_url)
-            .await
-            .unwrap();
-
-        let client = PickyDb::new(pool);
+        let client = PickyDb::new(test_db::new_pool().await);
         let service = PollOperationsImpl {db: client};
 
         let mock_user = Identity::SecretKey("test user".to_string());
