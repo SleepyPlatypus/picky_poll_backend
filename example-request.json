@@ -1,5 +1,19 @@
 {
   "//": "post to localhost:8080/polls",
   "name": "Dessert",
-  "description": "Which dessert shall be served?"
+  "description": "Which dessert shall be served?",
+  "candidates": [
+    {
+      "name": "🍦",
+      "description": "Ice cream"
+    },
+    {
+      "name": "🍪",
+      "description": "Cookies"
+    },
+    {
+      "name": "🎂",
+      "description": "Cake"
+    }
+  ]
 }

@@ -72,7 +72,8 @@ mod tests {
 
         let request_body = PostPollRequest{
             name: "test name".to_string(),
-            description: "test description".to_string()
+            description: "test description".to_string(),
+            candidates: Vec::new(),
         };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
             .uri(paths::POST_POLLS_PATH)

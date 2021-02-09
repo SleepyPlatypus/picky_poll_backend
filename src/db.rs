@@ -3,7 +3,7 @@ use chrono::{
     DateTime,
     offset::Utc,
 };
-use sqlx::{Executor, PgPool, postgres::PgDatabaseError};
+use sqlx::{Executor, PgPool};
 
 #[derive(Clone)]
 pub struct PickyDb {
@@ -77,7 +77,7 @@ impl PickyDb {
         PickyDb{ pool: db_pool }
     }
 
-    pub async fn insert_candidates(&self, poll_id: &str, candidates: Vec<Candidate>) -> Result<(), InsertCandidateErr> {
+    pub async fn insert_candidates(&self, poll_id: &str, candidates: &Vec<Candidate>) -> Result<(), InsertCandidateErr> {
         let mut tx = self.pool.begin()
             .await?;
 
@@ -95,7 +95,7 @@ impl PickyDb {
         Ok(())
     }
 
-    pub async fn select_candidates(&self, poll_id: &str) -> Result<Vec<Candidate>, InsertCandidateErr> {
+    pub async fn select_candidates(&self, poll_id: &str) -> Result<Vec<Candidate>, sqlx::Error> {
         let mut tx = self.pool.begin()
             .await
             ?;
@@ -201,7 +201,7 @@ mod tests {
             client.insert_poll(&mock_poll_row).await.unwrap();
     
             let mock_candidate = Candidate{name: "mock row".to_owned(), description: Some("mock description".to_owned())};
-            client.insert_candidates(&mock_poll_row.id, vec![
+            client.insert_candidates(&mock_poll_row.id, &vec![
                 mock_candidate.clone(),
             ]).await.expect("Failed to insert candidate");
     
@@ -221,11 +221,11 @@ mod tests {
             client.insert_poll(&mock_poll_row).await.unwrap();
     
             let mock_candidate = Candidate{name: "mock row".to_owned(), description: Some("mock description".to_owned())};
-            client.insert_candidates(&mock_poll_row.id, vec![
+            client.insert_candidates(&mock_poll_row.id, &vec![
                 mock_candidate.clone(),
             ]).await.expect("Failed to insert candidate");
     
-            let error = client.insert_candidates(&mock_poll_row.id, vec![
+            let error = client.insert_candidates(&mock_poll_row.id, &vec![
                     mock_candidate.clone(),
             ]).await
                 .expect_err("Should fail when inserting the same candidate again");

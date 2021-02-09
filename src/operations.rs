@@ -4,12 +4,13 @@ use crate::db::{
     PickyDb,
 };
 use async_trait::async_trait;
+use chrono::{Utc, Duration};
+use futures::join;
 use rand::{
     distributions::Alphanumeric,
     Rng,
     thread_rng
 };
-use chrono::{Utc, Duration};
 
 #[cfg(test)]
 use mockall::automock;
@@ -17,6 +18,7 @@ use mockall::automock;
 #[derive(Debug)]
 pub enum PostPollError {
     Conflict,
+    DuplicateCandidate,
     Error(sqlx::Error),
 }
 
@@ -71,12 +73,12 @@ impl PollOperations for PollOperationsImpl {
     async fn post_poll(&self, user: &Identity, request: PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>
     {
-        let poll_id = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
+        let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
         let Identity::SecretKey(owner_id_str) = user;
         let expires = Utc::now() + Duration::days(7);
 
         let row = db::Poll {
-            id: poll_id,
+            id: poll_id.clone(),
             name: request.name,
             description: request.description,
             owner_id: owner_id_str.clone(),
@@ -84,20 +86,47 @@ impl PollOperations for PollOperationsImpl {
             close: None
         };
 
+        let candidate_rows = request.candidates
+            .into_iter()
+            .map(move |req_c| db::Candidate {
+                name: req_c.name,
+                description: req_c.description,
+            }).collect();
+
         self.db.insert_poll(&row).await?;
+        self.db.insert_candidates(&poll_id, &candidate_rows)
+            .await
+            .map_err(|e| match e {
+                db::InsertCandidateErr::Conflict => PostPollError::DuplicateCandidate,
+                db::InsertCandidateErr::PostgresErr(e) => PostPollError::Error(e)
+            })?;
 
         Ok(PostPollResponse {id: row.id})
     }
 
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError> {
-        let row: db::Poll = self.db.select_poll(id).await?;
+        let poll = self.db.select_poll(id);
+        let candidates = self.db.select_candidates(id);
+        let (poll, candidates) = join!(poll, candidates);
+        let poll = poll?;
+
+        let candidates = candidates.map_err(|e| {
+            GetPollError::Error(e)
+        })?
+        .into_iter()
+        .map(|row| Candidate{
+            name: row.name,
+            description: row.description
+        })
+        .collect();
 
         Ok(GetPollResponse {
-            id: row.id,
-            name: row.name,
-            description: row.description,
-            expires: row.expires,
-            close: row.close,
+            id: poll.id,
+            name: poll.name,
+            description: poll.description,
+            expires: poll.expires,
+            close: poll.close,
+            candidates,
         })
     }
 }
@@ -116,8 +145,14 @@ mod tests {
         let mock_user = Identity::SecretKey("test user".to_string());
 
         let post_poll_request = PostPollRequest {
-            name: "test poll name".to_string(),
-            description: "test poll description".to_string(),
+            name: "test poll name".to_owned(),
+            description: "test poll description".to_owned(),
+            candidates: vec!(
+                Candidate{
+                    name: "candidate".to_owned(),
+                    description: Some("candidate description".to_owned()),
+                }
+            ),
         };
         let post_poll_response = service
             .post_poll(&mock_user, post_poll_request.clone())
@@ -125,10 +160,16 @@ mod tests {
             .unwrap();
 
         let get_poll_response = service
-            .get_poll(post_poll_response.id.as_str())
+            .get_poll(&post_poll_response.id)
             .await
             .unwrap();
 
-        assert_eq!(post_poll_request.name, get_poll_response.name)
+        assert_eq!(post_poll_request.name, get_poll_response.name);
+        
+        let mut request_candidates = post_poll_request.candidates.clone();
+        request_candidates.sort_by_key(|c|c.name.clone());
+        let mut response_candidates = get_poll_response.candidates.clone();
+        response_candidates.sort_by_key(|c|c.name.clone());
+        assert_eq!(post_poll_request.candidates, response_candidates);
     }
 }
