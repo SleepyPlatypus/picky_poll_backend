@@ -60,14 +60,15 @@ pub enum InsertCandidateErr {
 
 #[derive(Debug)]
 pub enum UpsertBallotErr {
-    Conflict,
-    NotAuthorized,
-    PostgressErr(sqlx::Error),
+    NotSameName,
+    NotOwner,
+    PollNotFound,
+    PostgresErr(sqlx::Error),
 }
 
 impl UpsertBallotErr {
     pub fn postgres(e: sqlx::Error) -> UpsertBallotErr {
-        UpsertBallotErr::PostgressErr(e)
+        UpsertBallotErr::PostgresErr(e)
     }
 }
 
@@ -163,7 +164,8 @@ impl PickyDb {
         .bind(poll_id);
 
         let mut tx = self.pool.begin().await.map_err(UpsertBallotErr::postgres)?;
-        let previous_row = get.fetch_optional(&mut tx)
+        let previous_row = get
+            .fetch_optional(&mut tx)
             .await.map_err(UpsertBallotErr::postgres)?;
         
         match previous_row {
@@ -176,13 +178,21 @@ impl PickyDb {
                 .bind(&ballot.owner_id)
                 .bind(poll_id);
                 insert.execute(&mut tx)
-                    .await.map_err(UpsertBallotErr::postgres)?;
+                    .await
+                    .map_err(|e| {
+                        let optional_code = e.as_database_error()
+                            .and_then(|dbe| dbe.code());
+                        match optional_code.as_deref() {
+                            Some("23503") => UpsertBallotErr::PollNotFound,
+                            _ => UpsertBallotErr::postgres(e)
+                        }
+                    })?;
             },
             Some(previous_row) => {
                 if previous_row.owner_id != ballot.id {
-                    return Err(UpsertBallotErr::NotAuthorized);
+                    return Err(UpsertBallotErr::NotOwner);
                 } else if previous_row.name != ballot.name {
-                    return Err(UpsertBallotErr::Conflict);
+                    return Err(UpsertBallotErr::NotSameName);
                 } else {
                     let update = sqlx::query(
                         "update ballot(timestamp) where id = $1 and poll_id = $2 values ($3)"
@@ -301,6 +311,8 @@ mod tests {
     }
 
     mod upsert_candidate {
+        use crate::model::Identity;
+
         use super::*;
         #[tokio::test]
         async fn happy_path_create() {
@@ -318,6 +330,29 @@ mod tests {
             client.upsert_ballot(&mock_poll_row.id, mock_ballot)
                 .await
                 .expect("Should successfully create the ballot");
+        }
+
+        #[tokio::test]
+        async fn poll_not_found() {
+            let client = PickyDb::new(test_db::new_pool().await);
+            
+            let mock_ballot = Ballot {
+                id: "1".to_owned(),
+                name: "".to_owned(),
+                owner_id: "".to_owned(),
+                timestamp: Utc::now()
+            };
+
+            let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
+
+            let error = client.upsert_ballot(&poll_id, mock_ballot)
+            .await
+            .expect_err("should error when poll does not exist");
+
+            match error {
+                UpsertBallotErr::PollNotFound => (),
+                _ => panic!("Should return PollNotFound {:?}", error),
+            }
         }
     }
 }

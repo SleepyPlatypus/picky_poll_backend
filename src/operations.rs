@@ -46,6 +46,20 @@ impl From<db::SelectPollErr> for GetPollError {
     }
 }
 
+#[derive(Debug)]
+pub enum PutBallotError {
+    PollNotFound,
+    NotOwner,
+    NotSameName,
+    Error(sqlx::Error),
+}
+
+impl PutBallotError {
+    fn sqlx(e: sqlx::Error) -> PutBallotError {
+        PutBallotError::Error(e)
+    }
+}
+
 #[derive(Clone)]
 pub struct PollOperationsImpl {
     db: PickyDb,
@@ -62,15 +76,20 @@ impl PollOperationsImpl {
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait PollOperations {
-    async fn post_poll(&self, user: &Identity, request: PostPollRequest)
+    async fn post_poll(&self, user: Identity, request: PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>;
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError>;
+    async fn put_ballot(&self,
+        poll_id: &str,
+        user_id: Identity,
+        ballot_id: String,
+        ballot: PutBallotRequest) -> Result<(), PutBallotError>;
 }
 
 #[async_trait]
 impl PollOperations for PollOperationsImpl {
 
-    async fn post_poll(&self, user: &Identity, request: PostPollRequest)
+    async fn post_poll(&self, user: Identity, request: PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>
     {
         let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
@@ -81,7 +100,7 @@ impl PollOperations for PollOperationsImpl {
             id: poll_id.clone(),
             name: request.name,
             description: request.description,
-            owner_id: owner_id_str.clone(),
+            owner_id: owner_id_str,
             expires,
             close: None
         };
@@ -129,6 +148,29 @@ impl PollOperations for PollOperationsImpl {
             candidates,
         })
     }
+
+    async fn put_ballot(&self,
+        poll_id: &str,
+        user_id: Identity,
+        ballot_id: String,
+        ballot: PutBallotRequest) -> Result<(), PutBallotError> {
+        let Identity::SecretKey(owner_id) = user_id;
+        let db_ballot = db::Ballot {
+            id: ballot_id,
+            name: ballot.name,
+            timestamp: Utc::now(),
+            owner_id,
+        };
+
+        self.db.upsert_ballot(poll_id, db_ballot)
+            .await
+            .map_err(|db_e| match db_e {
+                db::UpsertBallotErr::PollNotFound => PutBallotError::PollNotFound,
+                db::UpsertBallotErr::NotSameName => PutBallotError::NotSameName,
+                db::UpsertBallotErr::NotOwner => PutBallotError::NotOwner,
+                db::UpsertBallotErr::PostgresErr(e) => PutBallotError::Error(e)
+            })
+    }
 }
 
 #[cfg(test)]
@@ -155,7 +197,7 @@ mod tests {
             ),
         };
         let post_poll_response = service
-            .post_poll(&mock_user, post_poll_request.clone())
+            .post_poll(mock_user, post_poll_request.clone())
             .await
             .unwrap();
 

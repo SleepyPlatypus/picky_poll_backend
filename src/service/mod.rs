@@ -41,6 +41,8 @@ pub fn config<A: 'static + PollOperations>(cfg: &mut ServiceConfig) {
               web::post().to(paths::post_poll_handler::<A>))
         .route(paths::GET_POLLS_PATH,
                web::get().to(paths::get_poll_handler::<A>))
+        .route(paths::PUT_BALLOT_PATH,
+               web::put().to(paths::put_ballot_handler::<A>))
     ;
 }
 

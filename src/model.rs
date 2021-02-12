@@ -26,11 +26,20 @@ pub struct Candidate {
     pub description: Option<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Clone))]
 pub struct PostPollResponse {
     pub id: String,
 }
 
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Clone))]
+pub struct PutBallotRequest {
+    pub name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Clone))]
 pub enum Identity {
     SecretKey(String),
 }
