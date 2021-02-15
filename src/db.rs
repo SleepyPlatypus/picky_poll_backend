@@ -1,9 +1,11 @@
 
+use std::collections::HashMap;
+
 use chrono::{
     DateTime,
     offset::Utc,
 };
-use sqlx::{Executor, PgPool};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 
 #[derive(Clone)]
 pub struct PickyDb {
@@ -63,6 +65,7 @@ pub enum UpsertBallotErr {
     NotSameName,
     NotOwner,
     PollNotFound,
+    CandidateNotFound(String),
     PostgresErr(sqlx::Error),
 }
 
@@ -157,7 +160,8 @@ impl PickyDb {
         Ok(query.fetch_all(&mut tx).await?)
     }
 
-    pub async fn upsert_ballot(&self, poll_id: &str, ballot: Ballot) -> Result<(), UpsertBallotErr> {
+    pub async fn upsert_ballot(&self, poll_id: &str, ballot: Ballot, rankings: &Vec<String>) -> Result<(), UpsertBallotErr>
+    {
         let get = sqlx::query_as::<_, Ballot>(
             "select id, name, timestamp, owner_id from ballot where id = $1 and poll_id=$2"
         ).bind(&ballot.id)
@@ -189,23 +193,63 @@ impl PickyDb {
                     })?;
             },
             Some(previous_row) => {
-                if previous_row.owner_id != ballot.id {
+                if previous_row.owner_id != ballot.owner_id {
                     return Err(UpsertBallotErr::NotOwner);
                 } else if previous_row.name != ballot.name {
                     return Err(UpsertBallotErr::NotSameName);
                 } else {
                     let update = sqlx::query(
-                        "update ballot(timestamp) where id = $1 and poll_id = $2 values ($3)"
-                    ).bind(&ballot.id)
-                    .bind(poll_id)
-                    .bind(&ballot.timestamp);
+                        "update ballot set timestamp=$1 where id = $2 and poll_id = $3"
+                    ).bind(&ballot.timestamp)
+                    .bind(&ballot.id)
+                    .bind(poll_id);
                     update.execute(&mut tx)
                         .await
                         .map_err(UpsertBallotErr::postgres)?;
                 }
             },
         }
+        self.upsert_rankings(&mut tx, poll_id, &ballot.id, rankings).await?;
         tx.commit().await.map_err(UpsertBallotErr::postgres)?;
+        Ok(())
+    }
+
+    async fn upsert_rankings(&self,
+        tx: &mut Transaction<'_, Postgres>,
+        poll_id: &str,
+        ballot_id: &String,
+        rankings: &Vec<String>) -> Result<(), UpsertBallotErr>
+    {
+        sqlx::query("delete from ranking where poll_id = $1 and ballot_id = $2")
+            .bind(poll_id)
+            .bind(ballot_id)
+        .execute(&mut *tx).await.map_err(UpsertBallotErr::postgres)?;
+        let candidate_name_to_id: HashMap<String, i32> = sqlx::query_as::<_, (String, i32)>(
+            "select name, id from candidate where poll_id = $1"
+            )
+            .bind(poll_id)
+            .fetch_all(&mut *tx)
+            .await
+            .map_err(UpsertBallotErr::postgres)?
+            .into_iter()
+            .collect();
+        
+        for (i, candidate_name) in rankings.iter().enumerate() {
+            let candidate_id = candidate_name_to_id
+                .get(candidate_name)
+                .ok_or_else(|| UpsertBallotErr::CandidateNotFound(candidate_name.clone()))?;
+            sqlx::query(
+                "insert into ranking(poll_id, ballot_id, candidate_id, ranking)
+                    values ($1, $2, $3, $4)"
+                ).bind(poll_id)
+                .bind(ballot_id)
+                .bind(candidate_id)
+                .bind(i as i32)
+                .execute(&mut *tx)
+                .await
+                .map_err(UpsertBallotErr::postgres)?;
+        }
+
         Ok(())
     }
 }
@@ -311,8 +355,6 @@ mod tests {
     }
 
     mod upsert_candidate {
-        use crate::model::Identity;
-
         use super::*;
         #[tokio::test]
         async fn happy_path_create() {
@@ -327,7 +369,7 @@ mod tests {
                 timestamp: Utc::now()
             };
 
-            client.upsert_ballot(&mock_poll_row.id, mock_ballot)
+            client.upsert_ballot(&mock_poll_row.id, mock_ballot, &vec![])
                 .await
                 .expect("Should successfully create the ballot");
         }
@@ -345,7 +387,7 @@ mod tests {
 
             let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
 
-            let error = client.upsert_ballot(&poll_id, mock_ballot)
+            let error = client.upsert_ballot(&poll_id, mock_ballot, &vec![])
             .await
             .expect_err("should error when poll does not exist");
 

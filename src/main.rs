@@ -9,6 +9,7 @@ use std::time::Duration;
 
 mod model;
 mod service;
+mod util;
 mod db;
 mod operations;
 

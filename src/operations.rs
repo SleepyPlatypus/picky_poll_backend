@@ -48,6 +48,8 @@ impl From<db::SelectPollErr> for GetPollError {
 
 #[derive(Debug)]
 pub enum PutBallotError {
+    InvalidCandidate(String),
+    DuplicateRanking(String),
     PollNotFound,
     NotOwner,
     NotSameName,
@@ -162,9 +164,18 @@ impl PollOperations for PollOperationsImpl {
             owner_id,
         };
 
-        self.db.upsert_ballot(poll_id, db_ballot)
+        use crate::util;
+
+        let duplicate = util::first_duplicate(ballot.rankings.iter());
+        if let Some(duplicate) = duplicate {
+            return Err(PutBallotError::DuplicateRanking(duplicate.clone()));
+        }
+
+        self.db.upsert_ballot(poll_id, db_ballot, &ballot.rankings)
             .await
             .map_err(|db_e| match db_e {
+                db::UpsertBallotErr::CandidateNotFound(candidate_name) =>
+                    PutBallotError::InvalidCandidate(candidate_name),
                 db::UpsertBallotErr::PollNotFound => PutBallotError::PollNotFound,
                 db::UpsertBallotErr::NotSameName => PutBallotError::NotSameName,
                 db::UpsertBallotErr::NotOwner => PutBallotError::NotOwner,

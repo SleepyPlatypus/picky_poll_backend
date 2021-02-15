@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use actix_web::{Error, Result};
 use actix_web::web::{Data, HttpResponse, Path, Json};
 
@@ -48,10 +50,18 @@ pub async fn put_ballot_handler<A: 'static + PollOperations>(
         ops.put_ballot(&poll_id, user_id, ballot_id, request_body)
             .await
             .map_err(|e| match e {
-                PutBallotError::PollNotFound => HttpResponse::NotFound(),
-                PutBallotError::Error(_) => HttpResponse::InternalServerError(),
-                PutBallotError::NotOwner => HttpResponse::Forbidden(),
-                PutBallotError::NotSameName => HttpResponse::BadRequest(),
+                PutBallotError::PollNotFound => HttpResponse::NotFound().finish(),
+                PutBallotError::Error(_) => HttpResponse::InternalServerError().finish(),
+                PutBallotError::NotOwner => HttpResponse::Forbidden().finish(),
+                PutBallotError::NotSameName => HttpResponse::BadRequest().finish(),
+                PutBallotError::DuplicateRanking(candidate) => {
+                    let message = format!("Duplicate ranking: [{}]", candidate);
+                    HttpResponse::BadRequest().body(message)
+                }
+                PutBallotError::InvalidCandidate(name) => {
+                    let message = format!("Invalid candidate: [{}]", name);
+                    HttpResponse::BadRequest().body(message)
+                }
             })?;
         Ok(HttpResponse::NoContent().finish())
     }

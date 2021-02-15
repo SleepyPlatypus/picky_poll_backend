@@ -36,6 +36,7 @@ pub struct PostPollResponse {
 #[cfg_attr(test, derive(Clone))]
 pub struct PutBallotRequest {
     pub name: String,
+    pub rankings: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize)]
