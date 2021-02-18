@@ -1,6 +1,7 @@
 
 use std::collections::HashMap;
-
+use std::sync::Arc;
+use itertools::Itertools;
 use chrono::{
     DateTime,
     offset::Utc,
@@ -82,6 +83,15 @@ pub struct Ballot {
     pub name: String,
     pub timestamp: Timestamp,
     pub owner_id: String,
+    pub rankings: Vec<String>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub struct BallotSummary {
+    pub id: String,
+    pub name: String,
+    pub timestamp: Timestamp,
+    pub rankings: Vec<Arc<String>>,
 }
 
 impl From<sqlx::Error> for InsertCandidateErr {
@@ -160,7 +170,7 @@ impl PickyDb {
         Ok(query.fetch_all(&mut tx).await?)
     }
 
-    pub async fn upsert_ballot(&self, poll_id: &str, ballot: Ballot, rankings: &Vec<String>) -> Result<(), UpsertBallotErr>
+    pub async fn upsert_ballot(&self, poll_id: &str, ballot: Ballot) -> Result<(), UpsertBallotErr>
     {
         let get = sqlx::query_as::<_, Ballot>(
             "select id, name, timestamp, owner_id from ballot where id = $1 and poll_id=$2"
@@ -209,7 +219,7 @@ impl PickyDb {
                 }
             },
         }
-        self.upsert_rankings(&mut tx, poll_id, &ballot.id, rankings).await?;
+        self.upsert_rankings(&mut tx, poll_id, &ballot.id, &ballot.rankings).await?;
         tx.commit().await.map_err(UpsertBallotErr::postgres)?;
         Ok(())
     }
@@ -251,6 +261,64 @@ impl PickyDb {
         }
 
         Ok(())
+    }
+
+    pub async fn select_ballots(&self, poll_id: &str) -> Result<Vec<BallotSummary>, sqlx::Error> {
+        let mut tx = self.pool.begin().await?;
+        
+        let candidate_id_to_name: HashMap<i32, Arc<String>> = sqlx::query_as(
+            "select id, name from candidate where poll_id = $1"
+            ).bind(poll_id)
+            .fetch_all(&mut tx)
+            .await?
+            .into_iter()
+            .map(|(id, name)| (id, Arc::new(name)))
+            .collect();
+
+        let ballots: Vec<(String, String, Timestamp)> = sqlx::query_as(
+            "select id, name, timestamp from ballot where poll_id = $1"
+        ).bind(poll_id)
+        .fetch_all(&mut tx)
+        .await?;
+
+        let all_rankings: Vec<(String, i32, i16)> = sqlx::query_as(
+            "select ballot_id, candidate_id, ranking from ranking where poll_id = $1"
+        ).bind(poll_id)
+        .fetch_all(&mut tx)
+        .await?;
+
+        let mut ballots_to_rankings: HashMap<String, Vec<Arc<String>>> = all_rankings.into_iter()
+        .map(|(ballot_id, candidate_id, ranking)| (ballot_id, (candidate_id, ranking)))
+        .into_group_map()
+        .into_iter()
+        .map(|(ballot_id, mut local_rankings)| {
+            local_rankings.sort_by_key(|(_, r)| *r);
+            let ranked_candidates: Vec<Arc<String>> = local_rankings
+                .into_iter()
+                .flat_map(|(candidate_id, _)| {
+                    candidate_id_to_name
+                        .get(&candidate_id)
+                        .map(|name| name.clone())
+                }).collect();
+            (ballot_id, ranked_candidates)
+        })
+        .collect();
+
+        let ret_val: Vec<_> = ballots.into_iter()
+            .map(|(ballot_id, name, timestamp)| {
+                let this_ballot_rankings = ballots_to_rankings
+                    .remove(&ballot_id)
+                    .unwrap_or(Vec::new());
+                BallotSummary {
+                    id: ballot_id,
+                    name: name,
+                    timestamp: timestamp,
+                    rankings: this_ballot_rankings,
+                }
+            })
+            .collect();
+
+        Ok(ret_val)
     }
 }
 
@@ -366,10 +434,11 @@ mod tests {
                 id: "1".to_owned(),
                 name: "".to_owned(),
                 owner_id: "".to_owned(),
-                timestamp: Utc::now()
+                timestamp: Utc::now(),
+                rankings: Vec::new(),
             };
 
-            client.upsert_ballot(&mock_poll_row.id, mock_ballot, &vec![])
+            client.upsert_ballot(&mock_poll_row.id, mock_ballot)
                 .await
                 .expect("Should successfully create the ballot");
         }
@@ -382,12 +451,13 @@ mod tests {
                 id: "1".to_owned(),
                 name: "".to_owned(),
                 owner_id: "".to_owned(),
-                timestamp: Utc::now()
+                timestamp: Utc::now(),
+                rankings: Vec::new(),
             };
 
             let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
 
-            let error = client.upsert_ballot(&poll_id, mock_ballot, &vec![])
+            let error = client.upsert_ballot(&poll_id, mock_ballot)
             .await
             .expect_err("should error when poll does not exist");
 

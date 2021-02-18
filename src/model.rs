@@ -1,4 +1,5 @@
 use chrono::{DateTime, offset::Utc};
+use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -17,6 +18,15 @@ pub struct GetPollResponse {
     pub expires: DateTime<Utc>,
     pub close: Option<DateTime<Utc>>,
     pub candidates: Vec<Candidate>,
+    pub ballots: Vec<BallotSummary>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct BallotSummary {
+    pub id: String,
+    pub timestamp: DateTime<Utc>,
+    pub name: Arc<String>,
+    pub rankings: Vec<Arc<String>>,
 }
 
 #[derive(Serialize, Debug, Deserialize, PartialEq, Eq)]

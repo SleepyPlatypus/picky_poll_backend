@@ -11,6 +11,7 @@ use rand::{
     Rng,
     thread_rng
 };
+use std::sync::Arc;
 
 #[cfg(test)]
 use mockall::automock;
@@ -54,12 +55,6 @@ pub enum PutBallotError {
     NotOwner,
     NotSameName,
     Error(sqlx::Error),
-}
-
-impl PutBallotError {
-    fn sqlx(e: sqlx::Error) -> PutBallotError {
-        PutBallotError::Error(e)
-    }
 }
 
 #[derive(Clone)]
@@ -128,18 +123,28 @@ impl PollOperations for PollOperationsImpl {
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError> {
         let poll = self.db.select_poll(id);
         let candidates = self.db.select_candidates(id);
-        let (poll, candidates) = join!(poll, candidates);
+        let ballots = self.db.select_ballots(&id);
+        let (poll, candidates, ballots) = join!(poll, candidates, ballots);
         let poll = poll?;
 
         let candidates = candidates.map_err(|e| {
             GetPollError::Error(e)
-        })?
-        .into_iter()
+        })?.into_iter()
         .map(|row| Candidate{
             name: row.name,
             description: row.description
         })
         .collect();
+
+        let ballots = ballots.map_err(|e| GetPollError::Error(e))?
+            .into_iter()
+            .map(|b| BallotSummary {
+                id: b.id,
+                timestamp: b.timestamp,
+                name: Arc::new(b.name),
+                rankings: b.rankings,
+            })
+            .collect();
 
         Ok(GetPollResponse {
             id: poll.id,
@@ -148,6 +153,7 @@ impl PollOperations for PollOperationsImpl {
             expires: poll.expires,
             close: poll.close,
             candidates,
+            ballots,
         })
     }
 
@@ -157,21 +163,23 @@ impl PollOperations for PollOperationsImpl {
         ballot_id: String,
         ballot: PutBallotRequest) -> Result<(), PutBallotError> {
         let Identity::SecretKey(owner_id) = user_id;
-        let db_ballot = db::Ballot {
-            id: ballot_id,
-            name: ballot.name,
-            timestamp: Utc::now(),
-            owner_id,
-        };
-
-        use crate::util;
 
         let duplicate = util::first_duplicate(ballot.rankings.iter());
         if let Some(duplicate) = duplicate {
             return Err(PutBallotError::DuplicateRanking(duplicate.clone()));
         }
 
-        self.db.upsert_ballot(poll_id, db_ballot, &ballot.rankings)
+        let db_ballot = db::Ballot {
+            id: ballot_id,
+            name: ballot.name,
+            timestamp: Utc::now(),
+            owner_id,
+            rankings: ballot.rankings,
+        };
+
+        use crate::util;
+
+        self.db.upsert_ballot(poll_id, db_ballot)
             .await
             .map_err(|db_e| match db_e {
                 db::UpsertBallotErr::CandidateNotFound(candidate_name) =>

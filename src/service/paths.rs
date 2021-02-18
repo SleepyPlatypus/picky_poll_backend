@@ -1,5 +1,3 @@
-use std::fmt::Debug;
-
 use actix_web::{Error, Result};
 use actix_web::web::{Data, HttpResponse, Path, Json};
 
