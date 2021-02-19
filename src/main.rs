@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::env;
 
 use actix_web::{App, HttpServer};
@@ -17,6 +20,7 @@ const DB_URL: &str = "PICKYPOLL_DB_URL";
 
 #[actix_web::main]
 async fn main() {
+    env_logger::init();
     let db_url = &env::var(&DB_URL)
         .expect(format!("Failed to get {} from environment", DB_URL).as_str());
     let pool = PgPoolOptions::new()

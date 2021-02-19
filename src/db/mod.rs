@@ -1,4 +1,3 @@
-
 use std::collections::HashMap;
 use std::sync::Arc;
 use itertools::Itertools;
@@ -7,6 +6,8 @@ use chrono::{
     offset::Utc,
 };
 use sqlx::{Executor, PgPool, Postgres, Transaction};
+
+use crate::{model::{self, BallotSummary, GetPollResponse}, operations};
 
 #[derive(Clone)]
 pub struct PickyDb {
@@ -28,8 +29,26 @@ pub struct Poll {
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
 #[cfg_attr(test, derive(Clone))]
 pub struct Candidate {
+    pub id: i32,
     pub name: String,
     pub description: Option<String>,
+}
+
+#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+#[cfg_attr(test, derive(Clone))]
+pub struct Ballot {
+    pub id: String,
+    pub name: String,
+    pub timestamp: Timestamp,
+    pub owner_id: String,
+}
+
+#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
+pub struct Ranking {
+    pub ballot_id: String,
+    pub poll_id: String,
+    pub candidate_id: i32,
+    pub ranking: i16,
 }
 
 #[derive(Debug)]
@@ -42,12 +61,6 @@ impl From<sqlx::Error> for InsertPollErr {
     fn from(e: sqlx::Error) -> InsertPollErr {
         InsertPollErr::PostgresErr(e)
     }
-}
-
-#[derive(Debug)]
-pub enum SelectPollErr {
-    NotFound,
-    PostgresErr(sqlx::Error),
 }
 
 impl From<sqlx::Error> for SelectPollErr {
@@ -76,22 +89,66 @@ impl UpsertBallotErr {
     }
 }
 
-#[derive(sqlx::FromRow, Debug, Eq, PartialEq)]
-#[cfg_attr(test, derive(Clone))]
-pub struct Ballot {
-    pub id: String,
-    pub name: String,
-    pub timestamp: Timestamp,
-    pub owner_id: String,
-    pub rankings: Vec<String>,
+// #[derive(Debug, Eq, PartialEq)]
+// pub struct BallotSummary {
+//     pub id: String,
+//     pub name: String,
+//     pub timestamp: Timestamp,
+//     pub rankings: Vec<Arc<String>>,
+// }
+
+struct PickyPollTransaction<'a>{
+    tx: Transaction<'a, Postgres>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
-pub struct BallotSummary {
-    pub id: String,
-    pub name: String,
-    pub timestamp: Timestamp,
-    pub rankings: Vec<Arc<String>>,
+fn log_error(e: sqlx::Error) {
+    error!("sqlx error {:?}", e);
+}
+
+enum SelectPollErr {
+    PollNotFound,
+    Unexpected,
+}
+
+impl<'a> PickyPollTransaction<'a> {
+    async fn select_ballots(&mut self, poll_id: &str)
+    -> Result<Vec<Ballot>, sqlx::Error> {
+    
+        let ballots: Vec<Ballot> = sqlx::query_as(
+            "select id, name, timestamp, owner_id from ballot where poll_id = $1"
+        ).bind(poll_id)
+        .fetch_all(&mut self.tx)
+        .await?;
+        Ok(ballots)
+    }
+
+    pub async fn select_candidates(&mut self, poll_id: &str)-> Result<Vec<Candidate>, sqlx::Error> {
+        let query = sqlx::query_as::<_, Candidate>(
+            "select id, name, description from candidate where poll_id = $1"
+        ).bind(poll_id);
+
+        let result = query.fetch_all(&mut self.tx)
+            .await?;
+
+        Ok(result)
+    }
+
+    pub async fn select_poll(&mut self, id: &str) -> Result<Option<Poll>, sqlx::Error> {
+        let query = sqlx::query_as::<_, Poll>(
+            "select id, name, description, owner_id, expires, close \
+            from poll where id=$1",
+        ).bind(id);
+    
+        query.fetch_optional(&mut self.tx).await
+    }
+
+    pub async fn select_rankings(&mut self, poll_id: &str) -> Result<Vec<Ranking>, sqlx::Error> {
+        sqlx::query_as(
+            "select ballot_id, candidate_id, ranking from ranking where poll_id = $1"
+        ).bind(poll_id)
+        .fetch_all(&mut self.tx)
+        .await
+    }
 }
 
 impl From<sqlx::Error> for InsertCandidateErr {
@@ -131,15 +188,85 @@ impl PickyDb {
         Ok(())
     }
 
-    pub async fn select_poll(&self, id: &str) -> Result<Poll, SelectPollErr> {
-        let query = sqlx::query_as::<_, Poll>(
-            "select id, name, description, owner_id, expires, close \
-            from poll where id=$1",
-        ).bind(id);
+    pub async fn select_poll(&self, id: &str) -> Result<GetPollResponse, SelectPollErr> {
+        let transaction = self.pool.begin().
+            await
+            .map_err(|e| {
+                error!("Failed to get transaction: {:?}", e);
+                SelectPollErr::Unexpected
+            })?;
+        let mut transaction = PickyPollTransaction{tx: transaction};
+        let poll = transaction.select_poll(id)
+            .await
+            .map_err(|e| {
+                error!("Error selecting poll: {:?}", e);
+                SelectPollErr::Unexpected
+            })?
+            .ok_or(SelectPollErr::PollNotFound)?;
 
-        let poll = query.fetch_optional(&self.pool).await?;
+        let candidates = transaction.select_candidates(id).await;
+        let ballots = transaction.select_ballots(id).await;
+        let rankings = transaction.select_rankings(id).await;
+        
+        let (candidates, ballots, rankings) = candidates.and_then(|c|
+            ballots.and_then(|b|
+                rankings.map(|r| (c, b, r))
+            )
+        ).map_err(|e| {
+            error!("Error selecting poll: {:?}", e);
+            SelectPollErr::Unexpected
+        })?;
 
-        poll.ok_or(SelectPollErr::NotFound)
+        let candidate_id_to_name: HashMap<i32, Arc<String>> = candidates.iter()
+            .map(|c| (c.id, Arc::new(c.name.clone())))
+            .collect();
+
+        let mut rankings_by_ballot_id: HashMap<String, Vec<Ranking>> = rankings
+            .into_iter()
+            .into_group_map_by(|r| r.ballot_id.clone());
+        
+        let ballots = ballots.into_iter()
+            .map(|b| {
+                let mut local_rankings = rankings_by_ballot_id
+                    .remove(b.id.as_str())
+                    .unwrap_or_default();
+                local_rankings.sort_by_key(|r| r.ranking);
+                let local_rankings = local_rankings
+                    .into_iter()
+                    .flat_map(|r| {
+                        candidate_id_to_name
+                        .get(&r.candidate_id)
+                        .map(|arc| arc.clone())
+                            .or_else(|| {
+                                error!("Candidate not found for ballot_id={},candidate_id={}", &r.ballot_id, r.candidate_id);
+                                None
+                            })
+                    })
+                    .collect();
+                BallotSummary {
+                    id: b.id,
+                    name: Arc::new(b.name),
+                    timestamp: b.timestamp,
+                    rankings: local_rankings,
+                }
+            }).collect();
+        
+        let candidates = candidates.into_iter()
+            .map(|c| model::Candidate {
+                name: c.name,
+                description: c.description,
+            })
+            .collect();
+
+        Ok(GetPollResponse {
+            id: poll.id,
+            name: poll.name,
+            description: poll.description,
+            candidates: candidates,
+            expires: poll.expires,
+            close: poll.close,
+            ballots: ballots,
+        })
     }
 
     pub async fn insert_candidates(&self, poll_id: &str, candidates: &Vec<Candidate>) -> Result<(), InsertCandidateErr> {

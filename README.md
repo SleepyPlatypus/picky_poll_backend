@@ -18,7 +18,6 @@ curl "localhost:8080/polls" -d @example-request.json -H "content-type: applicati
 ```
 
 # API
-## Partially Implemented
 * POST /polls/
 * GET /polls/{poll_id}
 * PUT /polls/{poll_id}/ballots/{ballot_id}
