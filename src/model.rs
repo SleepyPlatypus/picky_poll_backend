@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(test, derive(Clone))]
 pub struct PostPollRequest {
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
     pub candidates: Vec<Candidate>,
 }
 
@@ -14,7 +14,7 @@ pub struct PostPollRequest {
 pub struct GetPollResponse {
     pub id: String,
     pub name: String,
-    pub description: String,
+    pub description: Option<String>,
     pub expires: DateTime<Utc>,
     pub close: Option<DateTime<Utc>>,
     pub candidates: Vec<Candidate>,

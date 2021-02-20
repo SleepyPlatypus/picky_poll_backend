@@ -36,7 +36,7 @@ impl FromRequest for Identity {
     }
 }
 
-pub fn config<A: 'static + PollOperations>(cfg: &mut ServiceConfig) {
+pub fn config<A: 'static + PollOperationsT>(cfg: &mut ServiceConfig) {
     cfg.route(paths::POST_POLLS_PATH,
               web::post().to(paths::post_poll_handler::<A>))
         .route(paths::GET_POLLS_PATH,
@@ -59,22 +59,23 @@ mod tests {
 
     #[tokio::test]
     async fn test_post_poll() {
-        let mut mock_ops = operations::MockPollOperations::new();
+        let mut mock_ops = operations::MockPollOperationsT::new();
 
         let mock_poll_id = "mock poll id";
         let mock_response = Ok(PostPollResponse{id: mock_poll_id.to_string()});
+        
         mock_ops.expect_post_poll()
             .return_once(move |_, _| mock_response);
 
         let mut app = test::init_service(
             App::new()
                 .data(mock_ops)
-                .configure(config::<MockPollOperations>)
+                .configure(config::<MockPollOperationsT>)
         ).await;
 
         let request_body = PostPollRequest{
             name: "test name".to_string(),
-            description: "test description".to_string(),
+            description: Some("test description".to_string()),
             candidates: Vec::new(),
         };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")

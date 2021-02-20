@@ -75,7 +75,7 @@ CREATE TABLE ranking
 
     CONSTRAINT ranking_pkey PRIMARY KEY (ballot_id, poll_id, candidate_id),
 
-    UNIQUE (ballot_id, ranking)
+    UNIQUE (ballot_id, poll_id, ranking)
 );
 CREATE INDEX fki_ranking_ballot_poll_fkey
     ON ranking(ballot_id, poll_id);

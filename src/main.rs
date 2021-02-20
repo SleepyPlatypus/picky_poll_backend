@@ -7,7 +7,7 @@ use actix_web::{App, HttpServer};
 use sqlx::postgres::PgPoolOptions;
 
 use db::PickyDb;
-use operations::PollOperationsImpl;
+use operations::PollOperations;
 use std::time::Duration;
 
 mod model;
@@ -35,10 +35,10 @@ async fn main() {
 
     let app = move || {
         let db = PickyDb::new(pool.clone());
-        let ops = operations::PollOperationsImpl::new(db);
+        let ops = PollOperations::new(db);
         App::new()
             .data(ops)
-            .configure(service::config::<PollOperationsImpl>)
+            .configure(service::config::<PollOperations>)
     };
     HttpServer::new(app).bind(("127.0.0.1", 8080))
         .expect("HTTP server failed to bind to 8080")
