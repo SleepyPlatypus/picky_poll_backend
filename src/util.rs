@@ -1,14 +1,13 @@
-use std::slice::Iter;
 use std::hash::Hash;
 use std::collections::HashSet;
 
-pub fn first_duplicate<'a, A>(iter: Iter<'a, A>) -> Option<&'a A>
+pub fn first_duplicate<'a, A>(iter: impl Iterator<Item=A>) -> Option<A>
 where A: Eq + Hash {
-    let mut set = HashSet::<&A>::new();
+    let mut set = HashSet::<A>::new();
     for a in iter {
-        let new = set.insert(a);
-        if !new {
-            return Some(a);
+        let old = set.replace(a);
+        if let Some(old) = old {
+            return Some(old);
         }
     }
     None

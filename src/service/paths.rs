@@ -18,7 +18,7 @@ pub async fn get_poll_handler<A: 'static + PollOperations>(
             match e {
                 GetPollError::NotFound =>
                     Error::from(HttpResponse::NotFound()),
-                GetPollError::Error(_) =>
+                GetPollError::Unexpected =>
                     Error::from(HttpResponse::InternalServerError()),
             }
         })?;
@@ -31,7 +31,7 @@ pub async fn post_poll_handler<A: 'static + PollOperations>(
     id: Identity) -> Result<Json<PostPollResponse>>
 {
     let Json(request_body) = body;
-    let ok = ops.post_poll(id, request_body)
+    let ok = ops.post_poll(&id, &request_body)
         .await
         .map_err(|_|{
             Error::from(HttpResponse::InternalServerError())
@@ -45,18 +45,18 @@ pub async fn put_ballot_handler<A: 'static + PollOperations>(
     body: Json<PutBallotRequest>,
     user_id: Identity) -> Result<HttpResponse> {
         let Json(request_body) = body;
-        ops.put_ballot(&poll_id, user_id, ballot_id, request_body)
+        ops.put_ballot(&poll_id, &user_id, &ballot_id, &request_body)
             .await
             .map_err(|e| match e {
                 PutBallotError::PollNotFound => HttpResponse::NotFound().finish(),
-                PutBallotError::Error(_) => HttpResponse::InternalServerError().finish(),
+                PutBallotError::Unexpected => HttpResponse::InternalServerError().finish(),
                 PutBallotError::NotOwner => HttpResponse::Forbidden().finish(),
                 PutBallotError::NotSameName => HttpResponse::BadRequest().finish(),
                 PutBallotError::DuplicateRanking(candidate) => {
                     let message = format!("Duplicate ranking: [{}]", candidate);
                     HttpResponse::BadRequest().body(message)
                 }
-                PutBallotError::InvalidCandidate(name) => {
+                PutBallotError::CandidateNotFound(name) => {
                     let message = format!("Invalid candidate: [{}]", name);
                     HttpResponse::BadRequest().body(message)
                 }

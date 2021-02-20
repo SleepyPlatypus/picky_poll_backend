@@ -1,17 +1,14 @@
-use crate::model::*;
+use crate::{model::*, util};
 use crate::db::{
     self,
     PickyDb,
 };
 use async_trait::async_trait;
-use chrono::{Utc, Duration};
-use futures::join;
 use rand::{
     distributions::Alphanumeric,
     Rng,
     thread_rng
 };
-use std::sync::Arc;
 
 #[cfg(test)]
 use mockall::automock;
@@ -19,42 +16,24 @@ use mockall::automock;
 #[derive(Debug)]
 pub enum PostPollError {
     Conflict,
-    DuplicateCandidate,
-    Error(sqlx::Error),
-}
-
-impl From<db::InsertPollErr> for PostPollError {
-    fn from(e : db::InsertPollErr) -> Self {
-        match e {
-            db::InsertPollErr::PostgresErr(e) => PostPollError::Error(e),
-            db::InsertPollErr::Conflict => PostPollError::Conflict,
-        }
-    }
+    DuplicateCandidate(String),
+    Unexpected,
 }
 
 #[derive(Debug)]
 pub enum GetPollError {
     NotFound,
-    Error(sqlx::Error),
-}
-
-impl From<db::SelectPollErr> for GetPollError {
-    fn from(e: db::SelectPollErr) -> Self {
-        match e {
-            db::SelectPollErr::PostgresErr(e) => GetPollError::Error(e),
-            db::SelectPollErr::NotFound => GetPollError::NotFound,
-        }
-    }
+    Unexpected,
 }
 
 #[derive(Debug)]
 pub enum PutBallotError {
-    InvalidCandidate(String),
+    CandidateNotFound(String),
     DuplicateRanking(String),
     PollNotFound,
     NotOwner,
     NotSameName,
-    Error(sqlx::Error),
+    Unexpected,
 }
 
 #[derive(Clone)]
@@ -73,121 +52,70 @@ impl PollOperationsImpl {
 #[cfg_attr(test, automock)]
 #[async_trait]
 pub trait PollOperations {
-    async fn post_poll(&self, user: Identity, request: PostPollRequest)
+    async fn post_poll(&self, user: &Identity, request: &PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>;
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError>;
     async fn put_ballot(&self,
         poll_id: &str,
-        user_id: Identity,
-        ballot_id: String,
-        ballot: PutBallotRequest) -> Result<(), PutBallotError>;
+        user_id: &Identity,
+        ballot_id: &str,
+        ballot: &PutBallotRequest) -> Result<(), PutBallotError>;
 }
 
 #[async_trait]
 impl PollOperations for PollOperationsImpl {
 
-    async fn post_poll(&self, user: Identity, request: PostPollRequest)
+    async fn post_poll(&self, user: &Identity, request: &PostPollRequest)
                        -> Result<PostPollResponse, PostPollError>
     {
         let poll_id: String = thread_rng().sample_iter(&Alphanumeric).take(10).collect();
-        let Identity::SecretKey(owner_id_str) = user;
-        let expires = Utc::now() + Duration::days(7);
 
-        let row = db::Poll {
-            id: poll_id.clone(),
-            name: request.name,
-            description: request.description,
-            owner_id: owner_id_str,
-            expires,
-            close: None
-        };
+        let duplicate_candidate = util::first_duplicate(
+            request.candidates.iter().map(|c| &c.name)
+        );
+        if let Some(duplicate_candidate) = duplicate_candidate {
+            return Err(PostPollError::DuplicateCandidate(duplicate_candidate.clone()));
+        }
 
-        let candidate_rows = request.candidates
-            .into_iter()
-            .map(move |req_c| db::Candidate {
-                name: req_c.name,
-                description: req_c.description,
-            }).collect();
-
-        self.db.insert_poll(&row).await?;
-        self.db.insert_candidates(&poll_id, &candidate_rows)
+        self.db.insert_poll(&poll_id, &user, &request)
             .await
             .map_err(|e| match e {
-                db::InsertCandidateErr::Conflict => PostPollError::DuplicateCandidate,
-                db::InsertCandidateErr::PostgresErr(e) => PostPollError::Error(e)
+                db::InsertPollErr::Conflict => PostPollError::Unexpected,
+                db::InsertPollErr::Unexpected => PostPollError::Unexpected,
             })?;
 
-        Ok(PostPollResponse {id: row.id})
+        Ok(PostPollResponse {id: poll_id})
     }
 
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError> {
-        let poll = self.db.select_poll(id);
-        let candidates = self.db.select_candidates(id);
-        let ballots = self.db.select_ballots(&id);
-        let (poll, candidates, ballots) = join!(poll, candidates, ballots);
-        let poll = poll?;
-
-        let candidates = candidates.map_err(|e| {
-            GetPollError::Error(e)
-        })?.into_iter()
-        .map(|row| Candidate{
-            name: row.name,
-            description: row.description
-        })
-        .collect();
-
-        let ballots = ballots.map_err(|e| GetPollError::Error(e))?
-            .into_iter()
-            .map(|b| BallotSummary {
-                id: b.id,
-                timestamp: b.timestamp,
-                name: Arc::new(b.name),
-                rankings: b.rankings,
-            })
-            .collect();
-
-        Ok(GetPollResponse {
-            id: poll.id,
-            name: poll.name,
-            description: poll.description,
-            expires: poll.expires,
-            close: poll.close,
-            candidates,
-            ballots,
+        self.db.select_poll(id).await
+        .map_err(|e| match e {
+            db::SelectPollErr::PollNotFound => GetPollError::NotFound,
+            db::SelectPollErr::Unexpected => GetPollError::Unexpected,
         })
     }
 
     async fn put_ballot(&self,
         poll_id: &str,
-        user_id: Identity,
-        ballot_id: String,
-        ballot: PutBallotRequest) -> Result<(), PutBallotError> {
-        let Identity::SecretKey(owner_id) = user_id;
+        user_id: &Identity,
+        ballot_id: &str,
+        ballot: &PutBallotRequest
+    ) -> Result<(), PutBallotError> {
 
         let duplicate = util::first_duplicate(ballot.rankings.iter());
         if let Some(duplicate) = duplicate {
             return Err(PutBallotError::DuplicateRanking(duplicate.clone()));
         }
 
-        let db_ballot = db::Ballot {
-            id: ballot_id,
-            name: ballot.name,
-            timestamp: Utc::now(),
-            owner_id,
-            rankings: ballot.rankings,
-        };
-
-        use crate::util;
-
-        self.db.upsert_ballot(poll_id, db_ballot)
+        self.db.upsert_ballot(poll_id, ballot_id, &user_id, ballot)
             .await
             .map_err(|db_e| match db_e {
                 db::UpsertBallotErr::CandidateNotFound(candidate_name) =>
-                    PutBallotError::InvalidCandidate(candidate_name),
+                    PutBallotError::CandidateNotFound(candidate_name),
                 db::UpsertBallotErr::PollNotFound => PutBallotError::PollNotFound,
                 db::UpsertBallotErr::NotSameName => PutBallotError::NotSameName,
                 db::UpsertBallotErr::NotOwner => PutBallotError::NotOwner,
-                db::UpsertBallotErr::PostgresErr(e) => PutBallotError::Error(e)
+                db::UpsertBallotErr::Unexpected => PutBallotError::Unexpected,
             })
     }
 }
@@ -216,7 +144,7 @@ mod tests {
             ),
         };
         let post_poll_response = service
-            .post_poll(mock_user, post_poll_request.clone())
+            .post_poll(&mock_user, &post_poll_request)
             .await
             .unwrap();
 
