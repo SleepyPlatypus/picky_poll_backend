@@ -81,7 +81,7 @@ impl<'a> PickyPollTransaction<'a> {
 
     pub async fn select_poll(&mut self, id: &str) -> Result<Option<Poll>, sqlx::Error> {
         sqlx::query_as::<_, Poll>(
-            "select id, name, description, owner_id, expires, close \
+            "select id, name, description, owner_id, expires, close, write_ins \
             from poll where id=$1",
         ).bind(id)
         .fetch_optional(&mut self.tx)
@@ -91,14 +91,15 @@ impl<'a> PickyPollTransaction<'a> {
     pub async fn insert_poll(&mut self, poll: &Poll) -> Result<PgDone, sqlx::Error> {
         sqlx::query(
             "insert \
-                into poll(id, name, description, owner_id, expires, close) \
-                values ($1, $2, $3, $4, $5, $6)"
+                into poll(id, name, description, owner_id, expires, close, write_ins) \
+                values ($1, $2, $3, $4, $5, $6, $7)"
         ).bind(&poll.id)
         .bind(&poll.name)
         .bind(&poll.description)
         .bind(&poll.owner_id)
         .bind(poll.expires)
         .bind(poll.close)
+        .bind(poll.write_ins)
         .execute(&mut self.tx)
         .await
     }

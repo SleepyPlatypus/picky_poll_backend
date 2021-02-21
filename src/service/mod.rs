@@ -37,12 +37,14 @@ impl FromRequest for Identity {
 }
 
 pub fn config<A: 'static + PollOperationsT>(cfg: &mut ServiceConfig) {
-    cfg.route(paths::POST_POLLS_PATH,
+    cfg.route(paths::POST_POLL_PATH,
               web::post().to(paths::post_poll_handler::<A>))
-        .route(paths::GET_POLLS_PATH,
+        .route(paths::GET_POLL_PATH,
                web::get().to(paths::get_poll_handler::<A>))
         .route(paths::PUT_BALLOT_PATH,
                web::put().to(paths::put_ballot_handler::<A>))
+        .route(paths::POST_CANDIDATE_PATH,
+            web::post().to(paths::post_candidate_handler::<A>))
     ;
 }
 
@@ -73,13 +75,16 @@ mod tests {
                 .configure(config::<MockPollOperationsT>)
         ).await;
 
-        let request_body = PostPollRequest{
+        let request_body = PostPollRequest {
             name: "test name".to_string(),
             description: Some("test description".to_string()),
             candidates: Vec::new(),
+            configuration: Configuration {
+                write_ins: false,
+            },
         };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
-            .uri(paths::POST_POLLS_PATH)
+            .uri(paths::POST_POLL_PATH)
             .set_json(&request_body)
             .method(Method::POST)
             .to_request();

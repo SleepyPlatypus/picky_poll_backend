@@ -33,6 +33,21 @@ impl From<sqlx::Error> for PostPollError {
 }
 
 #[derive(Debug)]
+pub enum PostCandidateError {
+    PollNotFound,
+    NoWriteIns,
+    DuplicateCandidate(String),
+    Unexpected,
+}
+
+impl From<sqlx::Error> for PostCandidateError {
+    fn from(e: sqlx::Error) -> Self {
+        log_sql_error(e);
+        Self::Unexpected
+    }
+}
+
+#[derive(Debug)]
 pub enum GetPollError {
     NotFound,
     Unexpected,
@@ -73,6 +88,7 @@ fn log_sql_error(e: sqlx::Error) {
 #[async_trait]
 pub trait PollOperationsT {
     async fn post_poll(&self, identity: &Identity, request: &PostPollRequest) -> Result<PostPollResponse, PostPollError>;
+    async fn post_candidate(&self, poll_id: &str, request: &Candidate) -> Result<(), PostCandidateError>;
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError>;
     async fn put_ballot(&self,
         poll_id: &str,
@@ -126,6 +142,7 @@ impl PollOperationsT for PollOperations {
             owner_id: owner_id.clone(),
             expires: Utc::now() + Duration::days(7),
             close: None,
+            write_ins: request.configuration.write_ins,
         };
 
         transaction.insert_poll(&poll).await?;
@@ -137,6 +154,33 @@ impl PollOperationsT for PollOperations {
         transaction.commit().await?;
 
         Ok(PostPollResponse {id: poll_id})
+    }
+
+    async fn post_candidate(&self, poll_id: &str, request: &Candidate) -> Result<(), PostCandidateError> {
+        let mut transaction = self.db.new_transaction()
+        .await?;
+
+        let poll = transaction.select_poll(poll_id)
+        .await?
+        .ok_or(PostCandidateError::PollNotFound)?;
+
+        if !poll.write_ins {
+            return Err(PostCandidateError::NoWriteIns);
+        }
+
+        let mut existing_candidates = transaction.select_candidates(&poll.id)
+        .await?
+        .into_iter()
+        .map(|c| c.name);
+
+        if let Some(_) = existing_candidates.find(|e| e == &request.name) {
+            return Err(PostCandidateError::DuplicateCandidate(request.name.clone()));
+        }
+
+        transaction.insert_candidate(&poll_id, &request.name, &request.description).await?;
+        transaction.commit().await?;
+        
+        Ok(())
     }
 
     async fn get_poll(&self, id: &str) -> Result<GetPollResponse, GetPollError> {
@@ -203,6 +247,9 @@ impl PollOperationsT for PollOperations {
             expires: poll.expires,
             close: poll.close,
             ballots,
+            configuration: Configuration {
+                write_ins: poll.write_ins
+            }
         })
     }
 
@@ -312,6 +359,9 @@ mod tests {
                     description: Some("candidate description".to_owned()),
                 }
             ),
+            configuration: Configuration {
+                write_ins: false,
+            },
         };
         let post_poll_response = service
             .post_poll(&mock_user, &post_poll_request)
@@ -347,6 +397,9 @@ mod tests {
                         Candidate{name: "cake".to_string(), description: None},
                         Candidate{name: "ice cream".to_string(), description: None},
                     ),
+                    configuration: Configuration {
+                        write_ins: false,
+                    },
                 },
             ).await
             .expect("Should post poll")

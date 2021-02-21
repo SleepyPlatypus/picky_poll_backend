@@ -21,6 +21,7 @@ pub struct Poll {
     pub owner_id: String,
     pub expires: Timestamp,
     pub close: Option<Timestamp>,
+    pub write_ins: bool,
 }
 
 #[derive(sqlx::FromRow, Debug, Eq, PartialEq)]

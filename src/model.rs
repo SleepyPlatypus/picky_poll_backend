@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct PostPollRequest {
     pub name: String,
     pub description: Option<String>,
+    pub configuration: Configuration,
     pub candidates: Vec<Candidate>,
 }
 
@@ -19,6 +20,7 @@ pub struct GetPollResponse {
     pub close: Option<DateTime<Utc>>,
     pub candidates: Vec<Candidate>,
     pub ballots: Vec<BallotSummary>,
+    pub configuration: Configuration,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -34,6 +36,13 @@ pub struct BallotSummary {
 pub struct Candidate {
     pub name: String,
     pub description: Option<String>,
+}
+
+#[derive(Serialize, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+#[cfg_attr(test, derive(Clone))]
+pub struct Configuration {
+    pub write_ins: bool
 }
 
 #[derive(Serialize, Deserialize)]

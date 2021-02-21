@@ -1,11 +1,14 @@
 use actix_web::Result;
 use actix_web::web::{Data, HttpResponse, Path, Json};
 
-use crate::{model::*, operations::PostPollError};
-use crate::operations::{PutBallotError, PollOperationsT, GetPollError};
+use crate::{
+    model::*,
+    operations::{GetPollError, PostCandidateError, PollOperationsT, PostPollError, PutBallotError}
+};
 
-pub const POST_POLLS_PATH: &str = "/polls";
-pub const GET_POLLS_PATH: &str = "/polls/{poll_id}";
+pub const POST_POLL_PATH: &str = "/polls";
+pub const POST_CANDIDATE_PATH: &str = "/polls/{poll_id}/candidates";
+pub const GET_POLL_PATH: &str = "/polls/{poll_id}";
 pub const PUT_BALLOT_PATH: &str = "/polls/{poll_id}/ballots/{ballot_id}";
 
 pub async fn get_poll_handler<A: 'static + PollOperationsT> (
@@ -14,15 +17,31 @@ pub async fn get_poll_handler<A: 'static + PollOperationsT> (
 {
     let poll = ops.get_poll(&path)
         .await
-        .map_err(|e| {
-            match e {
-                GetPollError::NotFound =>
-                    HttpResponse::NotFound().finish(),
-                GetPollError::Unexpected =>
-                    HttpResponse::InternalServerError().finish(),
-            }
+        .map_err(|e| match e {
+            GetPollError::NotFound =>
+                HttpResponse::NotFound().finish(),
+            GetPollError::Unexpected =>
+                HttpResponse::InternalServerError().finish(),
         })?;
     Ok(Json(poll))
+}
+
+pub async fn post_candidate_handler<A: 'static + PollOperationsT>(
+    ops: Data<A>,
+    Path(poll_id): Path<String>,
+    body: Json<Candidate>,
+) -> Result<HttpResponse> {
+    let Json(candidate) = body;
+    ops.post_candidate(&poll_id, &candidate)
+    .await
+    .map_err(|e| match e {
+        PostCandidateError::PollNotFound => HttpResponse::NotFound().finish(),
+        PostCandidateError::NoWriteIns => HttpResponse::BadRequest().body("Write-ins not allowed for this poll."),
+        PostCandidateError::DuplicateCandidate(_) => HttpResponse::Conflict().finish(),
+        PostCandidateError::Unexpected => HttpResponse::InternalServerError().finish(),
+    })?;
+
+    Ok(HttpResponse::NoContent().finish())
 }
 
 pub async fn post_poll_handler<A: 'static + PollOperationsT>(
