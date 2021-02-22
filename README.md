@@ -13,7 +13,7 @@ PICKYPOLL_TEST_DB=postgresql://postgres:a@localhost:5432 cargo test
 
 # Run paths & post example request
 PICKYPOLL_DB_URL=postgresql://postgres:a@localhost:5432 cargo watch -x run
-curl "localhost:8080/polls" -d @example-request.json -H "content-type: application/json" -i -H "secret-key: test"
+curl "localhost:8080/polls" -d @example-request.json -H "content-type: application/json" -i -H "x-secret-key: test"
 # retrieve it by GETting localhost:8080/polls/{poll_id}
 ```
 

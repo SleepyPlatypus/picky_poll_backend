@@ -10,5 +10,5 @@ RUN cargo install --path .
 
 FROM debian:buster-slim
 RUN apt-get update && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/local/cargo/bin/picky_poll_backend /usr/local/bin/picky_poll_backend
+COPY --from=build /usr/local/cargo/bin/picky_poll_backend /usr/local/bin/picky_poll_backend
 CMD ["picky_poll_backend"]
