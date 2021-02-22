@@ -40,7 +40,7 @@ async fn main() {
             .data(ops)
             .configure(service::config::<PollOperations>)
     };
-    HttpServer::new(app).bind(("127.0.0.1", 8080))
+    HttpServer::new(app).bind(("0.0.0.0", 8080))
         .expect("HTTP server failed to bind to 8080")
         .run()
         .await
