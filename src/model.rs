@@ -13,13 +13,18 @@ pub struct PostPollRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct GetPollResponse {
+    pub poll: Poll,
+    pub ballots: Vec<BallotSummary>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Poll {
     pub id: String,
     pub name: String,
     pub description: Option<String>,
     pub expires: DateTime<Utc>,
     pub close: Option<DateTime<Utc>>,
     pub candidates: Vec<Candidate>,
-    pub ballots: Vec<BallotSummary>,
     pub configuration: Configuration,
 }
 
@@ -31,16 +36,14 @@ pub struct BallotSummary {
     pub rankings: Vec<Arc<String>>,
 }
 
-#[derive(Serialize, Debug, Deserialize, PartialEq, Eq)]
-#[cfg_attr(test, derive(Clone))]
+#[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct Candidate {
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Serialize, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Serialize, Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-#[cfg_attr(test, derive(Clone))]
 pub struct Configuration {
     pub write_ins: bool
 }
@@ -48,7 +51,7 @@ pub struct Configuration {
 #[derive(Serialize, Deserialize)]
 #[cfg_attr(test, derive(Clone))]
 pub struct PostPollResponse {
-    pub id: String,
+    pub poll: Poll,
 }
 
 #[derive(Serialize, Deserialize)]

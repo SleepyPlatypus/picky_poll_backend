@@ -153,7 +153,17 @@ impl PollOperationsT for PollOperations {
 
         transaction.commit().await?;
 
-        Ok(PostPollResponse {id: poll_id})
+        Ok(PostPollResponse {
+            poll: Poll {
+                id: poll_id,
+                name: request.name.clone(),
+                description: request.description.clone(),
+                expires: poll.expires,
+                close: None,
+                configuration: request.configuration.clone(),
+                candidates: request.candidates.clone(),
+            }
+        })
     }
 
     async fn post_candidate(&self, poll_id: &str, request: &Candidate) -> Result<(), PostCandidateError> {
@@ -240,16 +250,18 @@ impl PollOperationsT for PollOperations {
         .collect();
 
         Ok(GetPollResponse {
-            id: poll.id,
-            name: poll.name,
-            description: poll.description,
-            candidates,
-            expires: poll.expires,
-            close: poll.close,
+            poll: Poll {
+                id: poll.id,
+                name: poll.name,
+                description: poll.description,
+                candidates,
+                expires: poll.expires,
+                close: poll.close,
+                configuration: Configuration {
+                    write_ins: poll.write_ins,
+                }
+            },
             ballots,
-            configuration: Configuration {
-                write_ins: poll.write_ins
-            }
         })
     }
 
@@ -373,11 +385,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(post_poll_request.name, get_poll_response.name);
+        assert_eq!(post_poll_request.name, get_poll_response.poll.name);
         
         let mut request_candidates = post_poll_request.candidates.clone();
         request_candidates.sort_by_key(|c|c.name.clone());
-        let mut response_candidates = get_poll_response.candidates.clone();
+        let mut response_candidates = get_poll_response.poll.candidates.clone();
         response_candidates.sort_by_key(|c|c.name.clone());
         assert_eq!(post_poll_request.candidates, response_candidates);
     }
@@ -428,11 +440,11 @@ mod tests {
             .expect("put ballot should succeed");
 
             //and we get the poll back
-            let returned_poll = ops.get_poll(&mock_poll_id)
+            let get_poll_response = ops.get_poll(&mock_poll_id)
             .await
             .expect("get poll should succeed");
             //then the poll should contain the mock ballot
-            let ballot = returned_poll.ballots
+            let ballot = get_poll_response.ballots
             .first()
             .expect("poll should have ballot");
 
@@ -467,11 +479,11 @@ mod tests {
             .expect("put ballot should succeed");
 
             //then the poll should contain the updated rankings
-            let returned_poll = ops.get_poll(&mock_poll_id)
+            let get_poll_response = ops.get_poll(&mock_poll_id)
             .await
             .expect("get poll should succeed");
 
-            let ballot = returned_poll.ballots
+            let ballot = get_poll_response.ballots
             .first()
             .expect("poll should have ballot");
 

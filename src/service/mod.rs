@@ -8,7 +8,7 @@ use crate::operations::*;
 
 mod paths;
 
-const SECRET_KEY: &str = "X-SECRET-KEY";
+const SECRET_KEY: &str = "X-VOTE-SECRET";
 
 impl FromRequest for Identity {
     type Error = Error;
