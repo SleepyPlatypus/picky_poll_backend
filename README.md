@@ -1,7 +1,6 @@
 # Picky Poll backend
-Porting the backend of [Picky Poll](https://pickypoll.com) to Rust.
+Rust backend for [Picky Poll](https://pickypoll.com).
 
-This port implements Creating+Reading polls. It is useless, until it allows creating ballots.
 # Developer Quickstart
 ```sh
 # Initialize and run Postgres database
@@ -13,7 +12,7 @@ PICKYPOLL_TEST_DB=postgresql://postgres:a@localhost:5432 cargo test
 
 # Run paths & post example request
 PICKYPOLL_DB_URL=postgresql://postgres:a@localhost:5432 cargo watch -x run
-curl "localhost:8080/polls" -d @example-request.json -H "content-type: application/json" -i -H "x-secret-key: test"
+curl "localhost:8080/polls" -d @example-request.json -H "content-type: application/json" -i -H "x-vote-secret: test"
 # retrieve it by GETting localhost:8080/polls/{poll_id}
 ```
 
