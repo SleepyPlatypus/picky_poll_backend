@@ -381,7 +381,7 @@ mod tests {
             .unwrap();
 
         let get_poll_response = service
-            .get_poll(&post_poll_response.id)
+            .get_poll(&post_poll_response.poll.id)
             .await
             .unwrap();
 
@@ -415,6 +415,7 @@ mod tests {
                 },
             ).await
             .expect("Should post poll")
+            .poll
             .id
         }
 

@@ -54,6 +54,7 @@ mod tests {
     use actix_web::http::Method;
     use actix_web::http::StatusCode;
     use actix_web::test;
+    use chrono::Utc;
 
     use crate::operations;
 
@@ -63,8 +64,27 @@ mod tests {
     async fn test_post_poll() {
         let mut mock_ops = operations::MockPollOperationsT::new();
 
+        let request_body = PostPollRequest {
+            name: "test name".to_string(),
+            description: Some("test description".to_string()),
+            candidates: Vec::new(),
+            configuration: Configuration {
+                write_ins: false,
+            },
+        };
+
         let mock_poll_id = "mock poll id";
-        let mock_response = Ok(PostPollResponse{id: mock_poll_id.to_string()});
+        let mock_response = Ok(PostPollResponse{poll: Poll {
+            id: mock_poll_id.to_string(),
+            name: request_body.name.clone(),
+            description: request_body.description.clone(),
+            expires: Utc::now(),
+            close: None,
+            candidates: vec!(),
+            configuration: Configuration {
+                write_ins: false
+            }
+        }});
         
         mock_ops.expect_post_poll()
             .return_once(move |_, _| mock_response);
@@ -75,14 +95,6 @@ mod tests {
                 .configure(config::<MockPollOperationsT>)
         ).await;
 
-        let request_body = PostPollRequest {
-            name: "test name".to_string(),
-            description: Some("test description".to_string()),
-            candidates: Vec::new(),
-            configuration: Configuration {
-                write_ins: false,
-            },
-        };
         let request = test::TestRequest::with_header(SECRET_KEY, "my_secret")
             .uri(paths::POST_POLL_PATH)
             .set_json(&request_body)
@@ -92,6 +104,6 @@ mod tests {
 
         assert_eq!(StatusCode::OK, response.status());
         let response_body: PostPollResponse = test::read_body_json(response).await;
-        assert_eq!(mock_poll_id, response_body.id);
+        assert_eq!(mock_poll_id, response_body.poll.id);
     }
 }

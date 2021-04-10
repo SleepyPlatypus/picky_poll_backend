@@ -18,6 +18,7 @@ pub struct GetPollResponse {
 }
 
 #[derive(Serialize, Deserialize)]
+#[cfg_attr(test, derive(Clone))]
 pub struct Poll {
     pub id: String,
     pub name: String,
