@@ -135,6 +135,14 @@ impl<'a> PickyPollTransaction<'a> {
             .await
     }
 
+    pub async fn delete_expired(&mut self, cutoff: &Timestamp) -> Result<PgDone, sqlx::Error> {
+        sqlx::query(
+            "delete from poll where expires < $1"
+        ).bind(&cutoff)
+        .execute(&mut self.tx)
+        .await
+    }
+
     pub async fn commit(self)-> Result<(), sqlx::Error> {
         self.tx.commit().await
     }

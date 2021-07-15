@@ -1,4 +1,6 @@
 *
-!src
+!cleanup
+!data
+!service
 !Cargo.toml
 !Cargo.lock

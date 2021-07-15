@@ -1,0 +1,19 @@
+[package]
+name = "cleanup"
+version = "0.1.0"
+authors = ["Stephen Mercado <stephenmerc@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "cleanup"
+path = "src/main.rs"
+
+[dependencies]
+data = {path = "../data"}
+
+chrono = { version = "0.4" }
+log = "0.4.14"
+env_logger = "0.8"
+sqlx = { version = "0.4.0", features = [ "runtime-tokio-rustls", "postgres", "chrono" ] }
+tokio = { version = "0.2", features = ["full"] }

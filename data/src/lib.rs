@@ -6,6 +6,9 @@ use chrono::{
     offset::Utc,
 };
 use sqlx::PgPool;
+
+pub const ENV_KEY: &str = "PICKYPOLL_DB_URL";
+
 #[derive(Clone)]
 pub struct PickyDb {
     pool: PgPool
@@ -56,23 +59,5 @@ impl PickyDb {
 
     pub async fn new_transaction(&self) -> Result<PickyPollTransaction<'_>, sqlx::Error> {
         PickyPollTransaction::new(&self.pool).await
-    }
-}
-
-#[cfg(test)]
-pub mod test_db {
-    use std::env;
-    use sqlx::{Pool, Postgres};
-    use sqlx::postgres::PgPoolOptions;
-    const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
-
-    pub async fn new_pool() -> Pool<Postgres> {
-        let db_url = &env::var(&DATABASE_URL)
-            .expect(&format!("env variable for {} must be set", DATABASE_URL));
-        PgPoolOptions::new()
-            .max_connections(1)
-            .connect(db_url)
-            .await
-            .expect("Failed to connect to the database")
     }
 }

@@ -352,12 +352,25 @@ impl PollOperationsT for PollOperations {
 #[cfg(test)]
 mod tests {
     use crate::db::PickyDb;
-    use super::db::test_db;
     use super::*;
+    use std::env;
+    use sqlx::{Pool, Postgres};
+    use sqlx::postgres::PgPoolOptions;
+    const DATABASE_URL: &str = "PICKYPOLL_TEST_DB";
+
+    pub async fn new_pool() -> Pool<Postgres> {
+        let db_url = &env::var(&DATABASE_URL)
+            .expect(&format!("env variable for {} must be set", DATABASE_URL));
+        PgPoolOptions::new()
+            .max_connections(1)
+            .connect(db_url)
+            .await
+            .expect("Failed to connect to the database")
+    }
 
     #[tokio::test]
     async fn test_post_poll() {
-        let db = PickyDb::new(test_db::new_pool().await);
+        let db = PickyDb::new(new_pool().await);
         let service = PollOperations::new(db);
 
         let mock_user = Identity::SecretKey("test user".to_string());
@@ -421,7 +434,7 @@ mod tests {
 
         #[tokio::test]
         async fn happy_path() {
-            let db = PickyDb::new(test_db::new_pool().await);
+            let db = PickyDb::new(new_pool().await);
             let ops = PollOperations::new(db);
 
             //given a poll
@@ -455,7 +468,7 @@ mod tests {
 
         #[tokio::test]
         async fn replace_ballot() {
-            let db = PickyDb::new(test_db::new_pool().await);
+            let db = PickyDb::new(new_pool().await);
             let ops = PollOperations::new(db);
 
             //given a poll
