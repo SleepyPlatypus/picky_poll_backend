@@ -1,16 +1,11 @@
-use data;
 use chrono;
 use log::info;
 use std::{
     env,
     fmt::{self, Display},
     error::Error,
-    time::Duration,
 };
-use sqlx::{
-    Done,
-    postgres::PgPoolOptions
-};
+use sqlx::{Connection, Done, PgConnection};
 
 #[derive(Debug)]
 struct BasicError(String);
@@ -30,26 +25,22 @@ async fn main() {
         .expect("Failed to run cleanup.")
 }
 
+const DB_ENV_KEY: &str ="PICKYPOLL_DB_URL";
+
 async fn verify() -> Result<(), Box<dyn Error>> {
-    let db_url = &env::var(&data::ENV_KEY)
-        .map_err(|_| BasicError(format!("Key {} not found in environment", &data::ENV_KEY)))?;
+    let db_url = &env::var(&DB_ENV_KEY)
+        .map_err(|_| BasicError(format!("Key {} not found in environment", &DB_ENV_KEY)))?;
 
-    let pool = PgPoolOptions::new()
-        .min_connections(1)
-        .max_connections(1)
-        .connect_timeout(Duration::from_secs(2))
-        .test_before_acquire(true)
-        .connect(db_url)
+    let mut conn = PgConnection::connect(db_url)
         .await?;
-
-    let db = data::PickyDb::new(pool);
 
     let now = chrono::Utc::now();
 
-    let mut tx = db.new_transaction().await?;
-    let done = tx.delete_expired(&now).await?;
-    tx.commit().await?;
-
+    let done = sqlx::query("delete from poll where expires <= $1")
+        .bind(now)
+        .execute(&mut conn)
+        .await?;
+        
     info!("Deleted {} rows", done.rows_affected());
 
     Ok(())

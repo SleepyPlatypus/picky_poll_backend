@@ -6,11 +6,10 @@ use std::env;
 use actix_web::{App, HttpServer};
 use sqlx::postgres::PgPoolOptions;
 
-use data as db;
-use data::PickyDb;
 use operations::PollOperations;
 use std::time::Duration;
 
+mod db;
 mod model;
 mod service;
 mod util;
@@ -19,8 +18,8 @@ mod operations;
 #[actix_web::main]
 async fn main() {
     env_logger::init();
-    let db_url = &env::var(&data::ENV_KEY)
-        .expect(format!("Failed to get {} from environment", data::ENV_KEY).as_str());
+    let db_url = &env::var(&db::ENV_KEY)
+        .expect(format!("Failed to get {} from environment", db::ENV_KEY).as_str());
     let pool = PgPoolOptions::new()
         .min_connections(1)
         .max_connections(4)
@@ -32,7 +31,7 @@ async fn main() {
     pool.acquire().await.expect("Failed to connect to database");
 
     let app = move || {
-        let db = PickyDb::new(pool.clone());
+        let db = db::PickyDb::new(pool.clone());
         let ops = PollOperations::new(db);
         App::new()
             .data(ops)

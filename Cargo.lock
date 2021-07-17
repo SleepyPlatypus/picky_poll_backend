@@ -523,7 +523,6 @@ name = "cleanup"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "data",
  "env_logger",
  "log",
  "sqlx",
@@ -624,14 +623,6 @@ checksum = "4857fd85a0c34b3c3297875b747c1e02e06b6a0ea32dd892d8192b9ce0813ea6"
 dependencies = [
  "generic-array",
  "subtle",
-]
-
-[[package]]
-name = "data"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "sqlx",
 ]
 
 [[package]]
@@ -1440,7 +1431,6 @@ dependencies = [
  "actix-web",
  "async-trait",
  "chrono",
- "data",
  "env_logger",
  "futures",
  "itertools",
